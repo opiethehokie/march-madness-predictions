@@ -1,0 +1,7 @@
+data/train.csv
+data/predict.csv
+data/rankings.csv
+*.pyc
+submissions/submission.csv
+submissions/bracket.txt
+venv/
