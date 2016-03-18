@@ -22,6 +22,7 @@ Predict win probabilities for tournement games in Kaggle March Machine Learning 
 - develop other rankings based on Colley or Massey methods (see http://netprophetblog.blogspot.com/2015/09/massey-example.html and https://www.kaggle.com/c/march-machine-learning-mania-2016/forums/t/19551/converting-spreads-to-win-percentages-and-vice-versa)
 - add more ML techniques
 - visualizations
+- threshold for upsets when creating bracket maybe should be higher than 50% ?
 
 
 [seed-based benchmark]: https://www.kaggle.com/c/march-machine-learning-mania-2016/forums/t/18902/understanding-the-benchmark-submissions
