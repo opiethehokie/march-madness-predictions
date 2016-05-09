@@ -1,0 +1,6 @@
+#!/bin/bash
+
+rm -rf $(find . | grep __pycache__)
+rm -rf $(find . | grep *.pyc)
+
+docker run --rm -it -v $PWD:/madness madness

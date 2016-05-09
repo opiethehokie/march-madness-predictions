@@ -1,0 +1,5 @@
+#!/bin/bash
+
+docker build -t madness .
+
+docker run --rm -it -v $PWD:/madness madness /bin/bash -c "pip freeze > /madness/requirements.txt"
