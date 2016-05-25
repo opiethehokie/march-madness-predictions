@@ -1,3 +1,7 @@
 *.pyc
 __pycache__
 .cache
+results/*.pkl
+results/out.txt
+results/submission.csv
+TODO

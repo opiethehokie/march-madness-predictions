@@ -1,0 +1,6 @@
+#!/bin/bash
+
+rm -rf $(find . | grep __pycache__)
+rm -rf $(find . | grep *.pyc)
+
+time docker run --rm -it -v $PWD:/workdir madness python3 madness.py | tee results/out.txt

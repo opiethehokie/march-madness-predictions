@@ -1,0 +1,15 @@
+[MASTER]
+
+disable=missing-docstring,no-member,invalid-name,protected-access
+
+[SIMILARITIES]
+
+min-similarity-lines=5
+
+[FORMAT]
+
+max-line-length=150
+
+[MISCELLANEOUS]
+
+notes=TODO

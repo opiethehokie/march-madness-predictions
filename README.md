@@ -1,2 +1,11 @@
-docker-machine start default
-eval "$(docker-machine env default)"
+# Machine Learning March Madness Predictions
+
+## Usage
+
+```
+bin/build
+
+bin/test
+
+bin/run
+```

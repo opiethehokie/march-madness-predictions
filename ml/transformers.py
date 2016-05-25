@@ -1,0 +1,334 @@
+#   Copyright 2016 Michael Peters
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+
+
+
+from collections import defaultdict
+from functools import partial
+
+import numpy
+
+from sklearn.base import BaseEstimator, TransformerMixin
+
+from ml import wrangling
+
+
+TOURNEY_START_DAY = 136
+
+class HomeCourtTransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self):
+        self.home = 'H'
+        self.away = 'A'
+
+    def fit(self, _X, _y=None):
+        return self
+
+    def transform(self, X):
+        onehot_home_court = []
+        for row in X.itertuples(index=False):
+            if row.Daynum >= TOURNEY_START_DAY:
+                onehot_home_court.append([0, 0])
+            elif row.Wloc != self.home and row.Wloc != self.away:
+                onehot_home_court.append([0, 0])
+            elif row.Wteam < row.Lteam:
+                if row.Wloc == self.home:
+                    onehot_home_court.append([1, 0])
+                else:
+                    onehot_home_court.append([0, 1])
+            else:
+                if row.Wloc == self.home:
+                    onehot_home_court.append([0, 1])
+                else:
+                    onehot_home_court.append([1, 0])
+        return numpy.array(onehot_home_court)
+
+class MovStdDevTransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, max_mov=25):
+        self.max_mov = max_mov
+        self.stats = defaultdict(partial(defaultdict, list))
+
+    def fit(self, _X, _y=None):
+        return self
+
+    def transform(self, X):
+        consistencies = []
+        for row in X.itertuples(index=False):
+            if row.Daynum < TOURNEY_START_DAY:
+                self.stats[row.Season][row.Wteam].append(min(row.Wscore - row.Lscore, self.max_mov))
+                self.stats[row.Season][row.Lteam].append(max(row.Lscore - row.Wscore, -self.max_mov))
+            wstd = numpy.std(self.stats[row.Season][row.Wteam])
+            lstd = numpy.std(self.stats[row.Season][row.Lteam])
+            if row.Wteam < row.Lteam:
+                consistencies.append([wstd, lstd])
+            else:
+                consistencies.append([lstd, wstd])
+        return numpy.array(consistencies)
+
+# http://netprophetblog.blogspot.com/2011/04/infinitely-deep-rpi.html
+# http://netprophetblog.blogspot.com/2011/04/rpi-distribution.html
+class ModifiedRPITransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, weights=(.15, .15, .7)):
+        self.weights = weights
+        self.stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+
+    def fit(self, _X, _y=None):
+        return self
+
+    def _rpi(self, season_results, team):
+        results = season_results[team]['results']
+        win_percent = sum(results) / len(results) if len(results) > 0 else 0
+        opponents_win_percent = self._opponents_win_percent(season_results, [o for o in season_results[team]['opponents'] if o != team])
+        opponents_opponents_win_percent = self._opponents_opponents_win_percent(season_results, season_results[team]['opponents'])
+        w1, w2, w3 = self.weights[0], self.weights[1], self.weights[2]
+        return w1 * win_percent + w2 * opponents_win_percent + w3 * opponents_opponents_win_percent
+
+    @staticmethod
+    def _opponents_win_percent(season_results, opponents):
+        win_percents = []
+        for opponent in opponents:
+            results = season_results[opponent]['results']
+            win_percent = sum(results) / len(results)
+            win_percents.append(win_percent)
+        return sum(win_percents) / len(opponents) if len(opponents) > 0 else 0
+
+    def _opponents_opponents_win_percent(self, season_results, opponents):
+        win_percents = []
+        for opponent in opponents:
+            win_percent = self._opponents_win_percent(season_results, season_results[opponent]['opponents'])
+            win_percents.append(win_percent)
+        return sum(win_percents) / len(opponents)
+
+    def transform(self, X):
+        rpis = []
+        for row in X.itertuples(index=False):
+            if row.Daynum < TOURNEY_START_DAY:
+                self.stats[row.Season][row.Wteam]['opponents'].append(row.Lteam)
+                self.stats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
+                self.stats[row.Season][row.Wteam]['results'].append(1)
+                self.stats[row.Season][row.Lteam]['results'].append(0)
+            wrpi = self._rpi(self.stats[row.Season], row.Wteam)
+            lrpi = self._rpi(self.stats[row.Season], row.Lteam)
+            if row.Wteam < row.Lteam:
+                rpis.append([wrpi, lrpi])
+            else:
+                rpis.append([lrpi, wrpi])
+        return numpy.array(rpis)
+
+class PythagoreanExpectationTransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, exponent=10.25):
+        self.exponent = exponent
+        self.stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+
+    def fit(self, _X, _y=None):
+        return self
+
+    def _pythagorean_expectation(self, results):
+        points = numpy.sum(results['points'])
+        points_against = numpy.sum(results['points-against'])
+        return points**self.exponent / (points**self.exponent + points_against**self.exponent)
+
+    def transform(self, X):
+        pythags = []
+        for row in X.itertuples(index=False):
+            if row.Daynum < TOURNEY_START_DAY:
+                self.stats[row.Season][row.Wteam]['points'].append(row.Wscore)
+                self.stats[row.Season][row.Wteam]['points-against'].append(row.Lscore)
+                self.stats[row.Season][row.Lteam]['points'].append(row.Lscore)
+                self.stats[row.Season][row.Lteam]['points-against'].append(row.Wscore)
+            wpythag = self._pythagorean_expectation(self.stats[row.Season][row.Wteam])
+            lpythag = self._pythagorean_expectation(self.stats[row.Season][row.Lteam])
+            if row.Wteam < row.Lteam:
+                pythags.append([wpythag, lpythag])
+            else:
+                pythags.append([lpythag, wpythag])
+        return numpy.array(pythags)
+
+# http://netprophetblog.blogspot.com/2012/02/continued-slow-pursuit-of-statistical.html
+class StatTransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, stat_F):
+        self.stat_F = stat_F
+        self.stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+
+    def fit(self, _X, _y=None):
+        return self
+
+    #pylint: disable=too-many-statements
+    def transform(self, X):
+        derived = []
+        for row in X.itertuples(index=False):
+            if row.Daynum < TOURNEY_START_DAY:
+                self.stats[row.Season][row.Wteam]['score'].append(row.Wscore)
+                self.stats[row.Season][row.Wteam]['score-against'].append(row.Lscore)
+                self.stats[row.Season][row.Lteam]['score'].append(row.Lscore)
+                self.stats[row.Season][row.Lteam]['score-against'].append(row.Wscore)
+                self.stats[row.Season][row.Wteam]['fgm'].append(row.Wfgm)
+                self.stats[row.Season][row.Wteam]['fgm-against'].append(row.Lfgm)
+                self.stats[row.Season][row.Lteam]['fgm'].append(row.Lfgm)
+                self.stats[row.Season][row.Lteam]['fgm-against'].append(row.Wfgm)
+                self.stats[row.Season][row.Wteam]['fga'].append(row.Wfga)
+                self.stats[row.Season][row.Wteam]['fga-against'].append(row.Lfga)
+                self.stats[row.Season][row.Lteam]['fga'].append(row.Lfga)
+                self.stats[row.Season][row.Lteam]['fga-against'].append(row.Wfga)
+                self.stats[row.Season][row.Wteam]['fgm3'].append(row.Wfgm3)
+                self.stats[row.Season][row.Wteam]['fgm3-against'].append(row.Lfgm3)
+                self.stats[row.Season][row.Lteam]['fgm3'].append(row.Lfgm3)
+                self.stats[row.Season][row.Lteam]['fgm3-against'].append(row.Wfgm3)
+                self.stats[row.Season][row.Wteam]['fga3'].append(row.Wfga3)
+                self.stats[row.Season][row.Wteam]['fga3-against'].append(row.Lfga3)
+                self.stats[row.Season][row.Lteam]['fga3'].append(row.Lfga3)
+                self.stats[row.Season][row.Lteam]['fga3-against'].append(row.Wfga3)
+                self.stats[row.Season][row.Wteam]['ftm'].append(row.Wftm)
+                self.stats[row.Season][row.Wteam]['ftm-against'].append(row.Lftm)
+                self.stats[row.Season][row.Lteam]['ftm'].append(row.Lftm)
+                self.stats[row.Season][row.Lteam]['ftm-against'].append(row.Wftm)
+                self.stats[row.Season][row.Wteam]['fta'].append(row.Wfta)
+                self.stats[row.Season][row.Wteam]['fta-against'].append(row.Lfta)
+                self.stats[row.Season][row.Lteam]['fta'].append(row.Lfta)
+                self.stats[row.Season][row.Lteam]['fta-against'].append(row.Wfta)
+                self.stats[row.Season][row.Wteam]['or'].append(row.Wor)
+                self.stats[row.Season][row.Wteam]['or-against'].append(row.Lor)
+                self.stats[row.Season][row.Lteam]['or'].append(row.Lor)
+                self.stats[row.Season][row.Lteam]['or-against'].append(row.Wor)
+                self.stats[row.Season][row.Wteam]['dr'].append(row.Wdr)
+                self.stats[row.Season][row.Wteam]['dr-against'].append(row.Ldr)
+                self.stats[row.Season][row.Lteam]['dr'].append(row.Ldr)
+                self.stats[row.Season][row.Lteam]['dr-against'].append(row.Wdr)
+                self.stats[row.Season][row.Wteam]['ast'].append(row.Wast)
+                self.stats[row.Season][row.Wteam]['ast-against'].append(row.Last)
+                self.stats[row.Season][row.Lteam]['ast'].append(row.Last)
+                self.stats[row.Season][row.Lteam]['ast-against'].append(row.Wast)
+                self.stats[row.Season][row.Wteam]['to'].append(row.Wto)
+                self.stats[row.Season][row.Wteam]['to-against'].append(row.Lto)
+                self.stats[row.Season][row.Lteam]['to'].append(row.Lto)
+                self.stats[row.Season][row.Lteam]['to-against'].append(row.Wto)
+                self.stats[row.Season][row.Wteam]['stl'].append(row.Wstl)
+                self.stats[row.Season][row.Wteam]['stl-against'].append(row.Lstl)
+                self.stats[row.Season][row.Lteam]['stl'].append(row.Lstl)
+                self.stats[row.Season][row.Lteam]['stl-against'].append(row.Wstl)
+                self.stats[row.Season][row.Wteam]['blk'].append(row.Wblk)
+                self.stats[row.Season][row.Wteam]['blk-against'].append(row.Lblk)
+                self.stats[row.Season][row.Lteam]['blk'].append(row.Lblk)
+                self.stats[row.Season][row.Lteam]['blk-against'].append(row.Wblk)
+                self.stats[row.Season][row.Wteam]['pf'].append(row.Wpf)
+                self.stats[row.Season][row.Wteam]['pf-against'].append(row.Lpf)
+                self.stats[row.Season][row.Lteam]['pf'].append(row.Lpf)
+                self.stats[row.Season][row.Lteam]['pf-against'].append(row.Wpf)
+            wstats = self.stat_F(self.stats[row.Season][row.Wteam])
+            lstats = self.stat_F(self.stats[row.Season][row.Lteam])
+            if row.Wteam < row.Lteam:
+                derived.append(numpy.hstack((wstats, lstats)))
+            else:
+                derived.append(numpy.hstack((lstats, wstats)))
+        return numpy.array(derived)
+
+class RatingTransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, rating_F, preseason_games, last_x_games=10):
+        self.rating_F = rating_F
+        self.last_x_games = last_x_games
+        self.preseason_games = preseason_games
+
+        self.teams = None
+        self.adj_stats = None
+
+    def fit(self, _X, _y=None):
+        self.teams = wrangling.all_teams(_X)
+        return self
+
+    @staticmethod
+    def _recalc_stats(teams, previous_games, last_x_games):
+        stat_categories = {x:i for i, x in enumerate(['eff_field_goal_percent', 'rebound_rate', 'free_throw_rate', 'turnover_rate',
+                                                      'assist_rate', 'block_rate', 'steal_rate', 'score_rate', 'foul_rate'])}
+        stats = {}
+        for season in list(teams.keys()):
+            stats[season] = numpy.zeros((len(teams[season]), len(teams[season]), len(stat_categories)))
+            for team in teams[season]:
+                bss = previous_games[season][team][-last_x_games:]
+                for bs in bss:
+                    wteam_id = teams[season][bs.Wteam]
+                    lteam_id = teams[season][bs.Lteam]
+                    wposs = bs.Wfga - bs.Wor + bs.Wto + .475 * bs.Wfta
+                    lposs = bs.Lfga - bs.Lor + bs.Lto + .475 * bs.Lfta
+                    stats[season][wteam_id][lteam_id][stat_categories['eff_field_goal_percent']] += ((bs.Wfgm + .5 * bs.Wfgm3) / bs.Wfga)
+                    stats[season][lteam_id][wteam_id][stat_categories['eff_field_goal_percent']] += ((bs.Lfgm + .5 * bs.Lfgm3) / bs.Lfga)
+                    stats[season][wteam_id][lteam_id][stat_categories['rebound_rate']] += bs.Wor / (bs.Wor + bs.Ldr)
+                    stats[season][lteam_id][wteam_id][stat_categories['rebound_rate']] += bs.Lor / (bs.Lor + bs.Wdr)
+                    stats[season][wteam_id][lteam_id][stat_categories['free_throw_rate']] += (bs.Wfta / bs.Wftm) if bs.Wftm > 0 else 0
+                    stats[season][lteam_id][wteam_id][stat_categories['free_throw_rate']] += (bs.Lfta / bs.Lftm) if bs.Lftm > 0 else 0
+                    stats[season][wteam_id][lteam_id][stat_categories['turnover_rate']] += (bs.Wto / wposs)
+                    stats[season][lteam_id][wteam_id][stat_categories['turnover_rate']] += (bs.Lto / lposs)
+                    stats[season][wteam_id][lteam_id][stat_categories['assist_rate']] += (bs.Wast / bs.Wfgm)
+                    stats[season][lteam_id][wteam_id][stat_categories['assist_rate']] += (bs.Last / bs.Lfgm)
+                    stats[season][wteam_id][lteam_id][stat_categories['block_rate']] += (bs.Wblk / bs.Lfga)
+                    stats[season][lteam_id][wteam_id][stat_categories['block_rate']] += (bs.Lblk / bs.Wfga)
+                    stats[season][wteam_id][lteam_id][stat_categories['steal_rate']] += (bs.Wstl / lposs)
+                    stats[season][lteam_id][wteam_id][stat_categories['steal_rate']] += (bs.Lstl / wposs)
+                    stats[season][wteam_id][lteam_id][stat_categories['score_rate']] += (bs.Wscore / wposs)
+                    stats[season][lteam_id][wteam_id][stat_categories['score_rate']] += (bs.Lscore / lposs)
+                    stats[season][wteam_id][lteam_id][stat_categories['foul_rate']] += (bs.Wpf / lposs)
+                    stats[season][lteam_id][wteam_id][stat_categories['foul_rate']] += (bs.Lpf / wposs)
+        return stats
+
+    def transform(self, X):
+        adjusted = []
+        current_day = 0
+        previous_games = defaultdict(partial(defaultdict, list))
+        for row in self.preseason_games.itertuples(index=False):
+            previous_games[row.Season][row.Wteam].append(row)
+            previous_games[row.Season][row.Lteam].append(row)
+        for row in X.itertuples(index=False):
+            previous_games[row.Season][row.Wteam].append(row)
+            previous_games[row.Season][row.Lteam].append(row)
+            if row.Daynum < TOURNEY_START_DAY and row.Daynum > current_day:
+                stats = self._recalc_stats(self.teams, previous_games, self.last_x_games)
+                self.adj_stats = self.rating_F(stats)
+                current_day = row.Daynum
+            team_ids = self.teams[row.Season]
+            wstats = self.adj_stats[row.Season][team_ids[row.Wteam]]
+            lstats = self.adj_stats[row.Season][team_ids[row.Lteam]]
+            if row.Wteam < row.Lteam:
+                adjusted.append(numpy.hstack((wstats, lstats)))
+            else:
+                adjusted.append(numpy.hstack((lstats, wstats)))
+        return numpy.array(adjusted)
+
+class DebugShape(BaseEstimator, TransformerMixin):
+
+    def fit(self, _X, _y=None):
+        return self
+
+    def transform(self, X):
+        print(X.shape)
+        return X
+
+# in pipeline you can do something like: ('debug', DebugFeatureImportances(SelectFromModel(LinearSVC(penalty='l1', dual=False))))
+class DebugFeatureImportances(BaseEstimator, TransformerMixin):
+
+    def __init__(self, model):
+        self.model = model
+
+    def fit(self, _X, _y=None):
+        self.model.fit(_X, _y)
+        #print(sorted(numpy.abs(self.model.estimator_.coef_[0]), reverse=True)[0: 50])
+        print(sorted(numpy.abs(self.model.estimator_.feature_importances_), reverse=True)[0: 50])
+        #print(sorted(self.model.scores_, reverse=True)[0: 50])
+        return self
+
+    def transform(self, X):
+        return X
