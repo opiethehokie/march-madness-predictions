@@ -18,9 +18,12 @@ from collections import defaultdict
 from functools import partial
 
 import numpy
+import pandas
 
+from scipy.stats import boxcox, skew
 from sklearn.base import BaseEstimator, TransformerMixin
 
+from ml import visualizations
 from ml import wrangling
 
 
@@ -54,38 +57,22 @@ class HomeCourtTransformer(BaseEstimator, TransformerMixin):
                     onehot_home_court.append([1, 0])
         return numpy.array(onehot_home_court)
 
-class MovStdDevTransformer(BaseEstimator, TransformerMixin):
-
-    def __init__(self, max_mov=25):
-        self.max_mov = max_mov
-        self.stats = defaultdict(partial(defaultdict, list))
-
-    def fit(self, _X, _y=None):
-        return self
-
-    def transform(self, X):
-        consistencies = []
-        for row in X.itertuples(index=False):
-            if row.Daynum < TOURNEY_START_DAY:
-                self.stats[row.Season][row.Wteam].append(min(row.Wscore - row.Lscore, self.max_mov))
-                self.stats[row.Season][row.Lteam].append(max(row.Lscore - row.Wscore, -self.max_mov))
-            wstd = numpy.std(self.stats[row.Season][row.Wteam])
-            lstd = numpy.std(self.stats[row.Season][row.Lteam])
-            if row.Wteam < row.Lteam:
-                consistencies.append([wstd, lstd])
-            else:
-                consistencies.append([lstd, wstd])
-        return numpy.array(consistencies)
-
 # http://netprophetblog.blogspot.com/2011/04/infinitely-deep-rpi.html
 # http://netprophetblog.blogspot.com/2011/04/rpi-distribution.html
 class ModifiedRPITransformer(BaseEstimator, TransformerMixin):
 
     def __init__(self, weights=(.15, .15, .7)):
         self.weights = weights
-        self.stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+        self.stats = None
 
-    def fit(self, _X, _y=None):
+    def fit(self, X, _y=None):
+        self.stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+        for row in X.itertuples(index=False):
+            if row.Daynum < TOURNEY_START_DAY:
+                self.stats[row.Season][row.Wteam]['opponents'].append(row.Lteam)
+                self.stats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
+                self.stats[row.Season][row.Wteam]['results'].append(1)
+                self.stats[row.Season][row.Lteam]['results'].append(0)
         return self
 
     def _rpi(self, season_results, team):
@@ -115,11 +102,6 @@ class ModifiedRPITransformer(BaseEstimator, TransformerMixin):
     def transform(self, X):
         rpis = []
         for row in X.itertuples(index=False):
-            if row.Daynum < TOURNEY_START_DAY:
-                self.stats[row.Season][row.Wteam]['opponents'].append(row.Lteam)
-                self.stats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
-                self.stats[row.Season][row.Wteam]['results'].append(1)
-                self.stats[row.Season][row.Lteam]['results'].append(0)
             wrpi = self._rpi(self.stats[row.Season], row.Wteam)
             lrpi = self._rpi(self.stats[row.Season], row.Lteam)
             if row.Wteam < row.Lteam:
@@ -134,7 +116,13 @@ class PythagoreanExpectationTransformer(BaseEstimator, TransformerMixin):
         self.exponent = exponent
         self.stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
 
-    def fit(self, _X, _y=None):
+    def fit(self, X, _y=None):
+        for row in X.itertuples(index=False):
+            if row.Daynum < TOURNEY_START_DAY:
+                self.stats[row.Season][row.Wteam]['points'].append(row.Wscore)
+                self.stats[row.Season][row.Wteam]['points-against'].append(row.Lscore)
+                self.stats[row.Season][row.Lteam]['points'].append(row.Lscore)
+                self.stats[row.Season][row.Lteam]['points-against'].append(row.Wscore)
         return self
 
     def _pythagorean_expectation(self, results):
@@ -145,11 +133,6 @@ class PythagoreanExpectationTransformer(BaseEstimator, TransformerMixin):
     def transform(self, X):
         pythags = []
         for row in X.itertuples(index=False):
-            if row.Daynum < TOURNEY_START_DAY:
-                self.stats[row.Season][row.Wteam]['points'].append(row.Wscore)
-                self.stats[row.Season][row.Wteam]['points-against'].append(row.Lscore)
-                self.stats[row.Season][row.Lteam]['points'].append(row.Lscore)
-                self.stats[row.Season][row.Lteam]['points-against'].append(row.Wscore)
             wpythag = self._pythagorean_expectation(self.stats[row.Season][row.Wteam])
             lpythag = self._pythagorean_expectation(self.stats[row.Season][row.Lteam])
             if row.Wteam < row.Lteam:
@@ -158,19 +141,64 @@ class PythagoreanExpectationTransformer(BaseEstimator, TransformerMixin):
                 pythags.append([lpythag, wpythag])
         return numpy.array(pythags)
 
+# in pipeline you can do something like: ('debug', DebugFeatureImportances(SelectFromModel(LinearSVC(penalty='l1', dual=False))))
+class DebugFeatureImportances(BaseEstimator, TransformerMixin):
+
+    def __init__(self, model):
+        self.model = model
+
+    def fit(self, _X, _y=None):
+        tmp = self.model.fit(_X, _y)
+        if hasattr(self.model, 'scores_'):
+            print(sorted(self.model.scores_, reverse=True)[0: 50])
+        elif hasattr(self.model.estimator_, 'coef'):
+            print(sorted(numpy.abs(self.model.estimator_.coef_[0]), reverse=True)[0: 50])
+        elif hasattr(self.model.estimator_, 'feature_importances_'):
+            print(sorted(numpy.abs(self.model.estimator_.feature_importances_), reverse=True)[0: 50])
+        return tmp
+
+    def transform(self, X):
+        return self.model.transform(X)
+
+# in pipeline you can do something like: ('debug', DebugFeatureProperties())
+# should also set n_jobs=1
+class DebugFeatureProperties(BaseEstimator, TransformerMixin):
+
+    def fit(self, _X, _y=None):
+        df = pandas.DataFrame(_X)
+        print(df.shape)
+        print(df.describe())
+        print(df.head(5))
+        print(skew(df))
+        print(df.cov())
+        print(df.corr())
+        visualizations.plot_scatter_matrix(df)
+        return self
+
+    def transform(self, X):
+        return X
+
+class ColumnSelector(BaseEstimator, TransformerMixin):
+
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+    def fit(self, _X, _y=None):
+        return self
+
+    def transform(self, X):
+        return X.iloc[:, self.start:self.end]
+
 # http://netprophetblog.blogspot.com/2012/02/continued-slow-pursuit-of-statistical.html
 class StatTransformer(BaseEstimator, TransformerMixin):
 
     def __init__(self, stat_F):
         self.stat_F = stat_F
+        self.stats = None
+
+    def fit(self, X, _y=None):
         self.stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
-
-    def fit(self, _X, _y=None):
-        return self
-
-    #pylint: disable=too-many-statements
-    def transform(self, X):
-        derived = []
         for row in X.itertuples(index=False):
             if row.Daynum < TOURNEY_START_DAY:
                 self.stats[row.Season][row.Wteam]['score'].append(row.Wscore)
@@ -229,26 +257,43 @@ class StatTransformer(BaseEstimator, TransformerMixin):
                 self.stats[row.Season][row.Wteam]['pf-against'].append(row.Lpf)
                 self.stats[row.Season][row.Lteam]['pf'].append(row.Lpf)
                 self.stats[row.Season][row.Lteam]['pf-against'].append(row.Wpf)
+        return self
+
+    def transform(self, X):
+        compiled_stats = []
+        for row in X.itertuples(index=False):
             wstats = self.stat_F(self.stats[row.Season][row.Wteam])
             lstats = self.stat_F(self.stats[row.Season][row.Lteam])
             if row.Wteam < row.Lteam:
-                derived.append(numpy.hstack((wstats, lstats)))
+                compiled_stats.append(numpy.hstack((wstats, lstats)))
             else:
-                derived.append(numpy.hstack((lstats, wstats)))
-        return numpy.array(derived)
+                compiled_stats.append(numpy.hstack((lstats, wstats)))
+        return numpy.array(compiled_stats)
 
 class RatingTransformer(BaseEstimator, TransformerMixin):
 
-    def __init__(self, rating_F, preseason_games, last_x_games=10):
+    def __init__(self, rating_F, preseason_games, last_x_games=0):
         self.rating_F = rating_F
-        self.last_x_games = last_x_games
-        self.preseason_games = preseason_games
+        self.preseason_games = preseason_games # need some games to have been played before ratings will converge
+        self.last_x_games = last_x_games # exclude older games
 
         self.teams = None
         self.adj_stats = None
 
-    def fit(self, _X, _y=None):
-        self.teams = wrangling.all_teams(_X)
+    def fit(self, X, _y=None):
+        self.teams = wrangling.all_teams(X)
+        previous_games = defaultdict(partial(defaultdict, list))
+        for row in self.preseason_games.itertuples(index=False):
+            previous_games[row.Season][row.Wteam].append(row)
+            previous_games[row.Season][row.Lteam].append(row)
+        current_day = 0
+        for row in X.itertuples(index=False):
+            previous_games[row.Season][row.Wteam].append(row)
+            previous_games[row.Season][row.Lteam].append(row)
+            if row.Daynum < TOURNEY_START_DAY and row.Daynum > current_day:
+                stats = self._recalc_stats(self.teams, previous_games, self.last_x_games)
+                self.adj_stats = self.rating_F(stats)
+                current_day = row.Daynum
         return self
 
     @staticmethod
@@ -287,18 +332,7 @@ class RatingTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         adjusted = []
-        current_day = 0
-        previous_games = defaultdict(partial(defaultdict, list))
-        for row in self.preseason_games.itertuples(index=False):
-            previous_games[row.Season][row.Wteam].append(row)
-            previous_games[row.Season][row.Lteam].append(row)
         for row in X.itertuples(index=False):
-            previous_games[row.Season][row.Wteam].append(row)
-            previous_games[row.Season][row.Lteam].append(row)
-            if row.Daynum < TOURNEY_START_DAY and row.Daynum > current_day:
-                stats = self._recalc_stats(self.teams, previous_games, self.last_x_games)
-                self.adj_stats = self.rating_F(stats)
-                current_day = row.Daynum
             team_ids = self.teams[row.Season]
             wstats = self.adj_stats[row.Season][team_ids[row.Wteam]]
             lstats = self.adj_stats[row.Season][team_ids[row.Lteam]]
@@ -308,27 +342,25 @@ class RatingTransformer(BaseEstimator, TransformerMixin):
                 adjusted.append(numpy.hstack((lstats, wstats)))
         return numpy.array(adjusted)
 
-class DebugShape(BaseEstimator, TransformerMixin):
+class SkewnessTransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, max_skew=.75, technique='log'):
+        self.max_skew = max_skew
+        self.technique = technique
 
     def fit(self, _X, _y=None):
         return self
 
     def transform(self, X):
-        print(X.shape)
-        return X
-
-# in pipeline you can do something like: ('debug', DebugFeatureImportances(SelectFromModel(LinearSVC(penalty='l1', dual=False))))
-class DebugFeatureImportances(BaseEstimator, TransformerMixin):
-
-    def __init__(self, model):
-        self.model = model
-
-    def fit(self, _X, _y=None):
-        self.model.fit(_X, _y)
-        #print(sorted(numpy.abs(self.model.estimator_.coef_[0]), reverse=True)[0: 50])
-        print(sorted(numpy.abs(self.model.estimator_.feature_importances_), reverse=True)[0: 50])
-        #print(sorted(self.model.scores_, reverse=True)[0: 50])
-        return self
-
-    def transform(self, X):
-        return X
+        X = pandas.DataFrame(X)
+        skewed_feats = X.apply(skew)
+        very_skewed_feats = skewed_feats[numpy.abs(skewed_feats) > self.max_skew]
+        transformed = X.copy()
+        if self.technique == 'sqrt':
+            transformed[very_skewed_feats.index] = numpy.sqrt(X[very_skewed_feats.index])
+        elif self.technique == 'log':
+            transformed[very_skewed_feats.index] = numpy.log1p(X[very_skewed_feats.index])
+        elif self.technique == 'boxcox':
+            for idx in very_skewed_feats.index:
+                transformed[idx] = boxcox(X[idx]+1)[0]
+        return transformed

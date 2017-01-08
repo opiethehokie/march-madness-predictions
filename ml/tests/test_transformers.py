@@ -16,7 +16,7 @@
 import numpy
 import pandas
 
-from ml.transformers import HomeCourtTransformer, ModifiedRPITransformer, MovStdDevTransformer, RatingTransformer
+from ml.transformers import HomeCourtTransformer, ModifiedRPITransformer, RatingTransformer, SkewnessTransformer
 
 
 def test_home_court_transformer():
@@ -30,17 +30,6 @@ def test_home_court_transformer():
     X = pandas.DataFrame([box_score1, box_score2, box_score3, box_score4, box_score5, box_score6], columns=headers)
     assert numpy.array_equal(numpy.array([[1, 0], [0, 1], [0, 0], [0, 1], [1, 0], [0, 0]]),
                              HomeCourtTransformer().fit_transform(X))
-
-def test_consistency_transformer():
-    headers = ['Season', 'Wteam', 'Lteam', 'Wscore', 'Lscore', 'Daynum']
-    box_score1 = [1, 1, 2, 60, 50, 4]
-    box_score2 = [1, 2, 1, 55, 50, 5]
-    box_score3 = [2, 1, 2, 66, 64, 6]
-    X = pandas.DataFrame([box_score1, box_score2, box_score3], columns=headers)
-    assert numpy.array_equal(numpy.array([[0, 0], [7.5, 7.5], [0, 0]]),
-                             MovStdDevTransformer(25).fit_transform(X))
-    assert numpy.array_equal(numpy.array([[0, 0], [5, 5], [0, 0]]),
-                             MovStdDevTransformer(max_mov=5).fit_transform(X))
 
 def test_rpi_transformer():
     season_stats = {1: {'opponents': [2, 3], 'results': [1, 1]}, 2: {'opponents': [1, 3], 'results': [0, 0]},
@@ -64,7 +53,7 @@ def test_calculate_stats_all():
     box_scores = fake_games()
     previous_games = {2010: {4: [box_scores.iloc[0], box_scores.iloc[2]], 6: [box_scores.iloc[1], box_scores.iloc[0]],
                              11: [box_scores.iloc[2], box_scores.iloc[1]]}}
-    stats = RatingTransformer(None, pandas.DataFrame())._recalc_stats(teams, previous_games, 2)
+    stats = RatingTransformer(None, pandas.DataFrame())._recalc_stats(teams, previous_games, 0)
     assert numpy.any(stats[2010][0][1])
     assert numpy.any(stats[2010][0][2])
     assert numpy.any(stats[2010][1][0])
@@ -75,18 +64,15 @@ def test_calculate_stats_all():
     assert not numpy.any(stats[2010][1][1])
     assert not numpy.any(stats[2010][2][2])
 
-def test_calculate_stats_partial():
-    teams = {2010: {4:0, 6:1, 11:2}}
-    box_scores = fake_games()
-    previous_games = {2010: {4: [box_scores.iloc[0], box_scores.iloc[2]], 6: [box_scores.iloc[1], box_scores.iloc[0]],
-                             11: [box_scores.iloc[2], box_scores.iloc[1]]}}
-    stats = RatingTransformer(None, pandas.DataFrame())._recalc_stats(teams, previous_games, 1)
-    assert numpy.any(stats[2010][0][1])
-    assert numpy.any(stats[2010][0][2])
-    assert numpy.any(stats[2010][1][0])
-    assert numpy.any(stats[2010][1][2])
-    assert numpy.any(stats[2010][2][0])
-    assert numpy.any(stats[2010][2][1])
-    assert not numpy.any(stats[2010][0][0])
-    assert not numpy.any(stats[2010][1][1])
-    assert not numpy.any(stats[2010][2][2])
+def test_skew_transformer():
+    data = numpy.array([[9, 9, 1],
+                        [8, 9, 2],
+                        [1, 1, 1]])
+    skew = SkewnessTransformer(max_skew=.7, technique='sqrt')
+    assert not numpy.array_equal(skew.transform(data), data)
+    skew = SkewnessTransformer(max_skew=.5, technique='log')
+    assert not numpy.array_equal(skew.transform(data), data)
+    skew = SkewnessTransformer(max_skew=.5, technique='boxcox')
+    assert not numpy.array_equal(skew.transform(data), data)
+    skew = SkewnessTransformer(max_skew=100, technique='boxcox')
+    assert numpy.array_equal(skew.transform(data), data)

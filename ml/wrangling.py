@@ -16,23 +16,28 @@
 import cProfile
 import itertools
 import numpy
-import pandas
+
+from scipy import stats
 
 
 TOURNEY_START_DAY = 136
 
-def all_teams(games):
-    seasons = games['Season'].unique()
+def all_teams(data):
+    seasons = data['Season'].unique()
     teams = {}
     for season in seasons:
-        season_games = games.query('Season == %s' % season)
+        season_games = data.query('Season == %s' % season)
         sorted_teams = sorted((season_games['Wteam'].append(season_games['Lteam'])).unique())
         teams[season] = {x:i for i, x in enumerate(sorted_teams)}
     return teams
 
-def oversample_tourney_games(data):
+def oversample_tourney_games(data, factor=5):
     tourney_games = data[data.Daynum > TOURNEY_START_DAY]
-    return pandas.concat([data, tourney_games])
+    return data.append([tourney_games]*factor, ignore_index=True)
+
+def filter_outlier_games(data, m=3):
+    numeric_data = data.select_dtypes(include=['int64'])
+    return data[(numpy.abs(stats.zscore(numeric_data)) < m).all(axis=1)]
 
 def custom_train_test_split(data, predict_year):
     train_games = data[(data.Season != predict_year) | (data.Daynum < TOURNEY_START_DAY)]

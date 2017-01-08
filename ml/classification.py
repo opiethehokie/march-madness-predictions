@@ -13,27 +13,31 @@
 #   limitations under the License.
 
 
-from mlxtend.classifier import StackingClassifier
+from mlxtend.classifier import StackingClassifier, StackingCVClassifier
+from sklearn.decomposition.pca import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier, ExtraTreesClassifier
 from sklearn.externals.joblib import Memory
-from sklearn.feature_selection import SelectFromModel, RFE
+from sklearn.feature_selection import SelectFromModel
 from sklearn.linear_model import LogisticRegression, RandomizedLogisticRegression
 from sklearn.metrics import log_loss
-from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit, StratifiedKFold
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import Normalizer, StandardScaler
-from sklearn.svm import SVC, LinearSVC
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 
-from ml.pipeline import CachedPipeline, FeatureUnion, Pipeline
-from ml.transformers import DebugShape, DebugFeatureImportances
-from ml.transformers import (HomeCourtTransformer, StatTransformer, ModifiedRPITransformer,
-                             MovStdDevTransformer, PythagoreanExpectationTransformer, RatingTransformer)
+from ml.transformers import DebugFeatureImportances, DebugFeatureProperties
+from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, PythagoreanExpectationTransformer, RatingTransformer, 
+                             SkewnessTransformer, StatTransformer)
+from ml.visualizations import plot_auc, plot_confusion_matrix
 from ml.wrangling import derive_stats, describe_stats
 from ratings import markov, off_def
+from sklearn.feature_selection.univariate_selection import SelectKBest
+from sklearn.neural_network.multilayer_perceptron import MLPClassifier
 
 
-# annotate function with @print_models to see CV details
 def print_models(func):
     def printed_func(*args, **kwargs):
         model = func(*args, **kwargs)
@@ -50,54 +54,51 @@ def print_models(func):
 @print_models
 def train_stacked_model(preseason_games, X_train, X_test, y_train, y_test):
 
-    pipe = CachedPipeline([
+    # pipeline guidelines - http://blog.kaggle.com/2016/07/21/approaching-almost-any-machine-learning-problem-abhishek-thakur/
+    # feature selection comparison - http://blog.datadive.net/selecting-good-features-part-iv-stability-selection-rfe-and-everything-side-by-side/
+    # stacking ensemble works best when first-level classifiers are weakly correlated
+    # since our metric is log loss, logistic regression in second-level is good for calibrating the probabilities
+    pipe = Pipeline([
         ('feature_engineering', FeatureUnion([
             ('home_court', HomeCourtTransformer()),
-            ('results', Pipeline([
-                ('types', FeatureUnion([
-                    ('mov', MovStdDevTransformer()),
-                    ('pythag', PythagoreanExpectationTransformer()),
-                    ('sos', ModifiedRPITransformer()) #TODO stat graphs here
-                ])),
-                ('scaling', StandardScaler())
-            ])),
-            # feature selection comparison - http://blog.datadive.net/selecting-good-features-part-iv-stability-selection-rfe-and-everything-side-by-side/
-            ('derived_stats', Pipeline([
-                ('combos', StatTransformer(derive_stats)),
-                ('selection', SelectFromModel(ExtraTreesClassifier())),
-                ('scaling', Normalizer())
-            ])),
+            ('pythag', PythagoreanExpectationTransformer()),
+            ('sos', ModifiedRPITransformer()),
+            ('markov', RatingTransformer(markov.markov_stats, preseason_games)),
+            ('offdef', RatingTransformer(off_def.adjust_stats, preseason_games)),
+            #('derived_stats', Pipeline([
+            #    ('combos', StatTransformer(derive_stats)),
+            #    ('prune_garbage', SelectFromModel(ExtraTreesClassifier()))
+            #])),
             ('descriptive_stats', Pipeline([
                 ('summaries', StatTransformer(describe_stats)),
-                ('scaling', StandardScaler()),
-                ('selection', RFE(LinearSVC(dual=False)))
-            ])),
-            ('adj_stats1', Pipeline([
-                ('markov', RatingTransformer(markov.markov_stats, preseason_games)),
-                ('scaling', Normalizer(norm='l1')),
-                ('selection', RandomizedLogisticRegression()) # stability selection
-            ])),
-            ('adj_stats2', Pipeline([
-                ('offdef', RatingTransformer(off_def.adjust_stats, preseason_games)),
-                ('scaling', Normalizer(norm='l1')),
-                ('selection', RandomizedLogisticRegression()),
-                ('debug', DebugShape())
+                ('prune_garbage', SelectFromModel(ExtraTreesClassifier()))
             ]))
         ])),
-        #TODO scatter matrix here
-        # stacking ensemble works best when first-level classifiers are weakly correlated
-        # since our metric is log loss, logistic regression in second-level is good for calibrating the probabilities
-        ('stacked_classification', StackingClassifier(use_probas=True,
-                                                      average_probas=False,
-                                                      verbose=2,
-                                                      classifiers=[SVC(probability=True, kernel='linear'),
-                                                                   KNeighborsClassifier(n_jobs=-1),
-                                                                   RandomForestClassifier(n_jobs=-1),
-                                                                   GradientBoostingClassifier(),
-                                                                   GaussianNB()
-                                                                   ],
-                                                      meta_classifier=LogisticRegression(n_jobs=-1))) #TODO switch this to StackingCVClassifier
-        ], memory=Memory(cachedir='.cache', verbose=0))
+        ('preprocessing', Pipeline([
+            ('skew', SkewnessTransformer()),
+            ('standardize', StandardScaler()),
+        ])),
+        ('feature_select', SelectKBest()), # pca didn't work here
+        #('debug', DebugFeatureProperties()),
+        #('stacked_classification', StackingClassifier(use_probas=True,
+        #                                              average_probas=False,
+        #                                              verbose=2,
+        #                                              classifiers=[SVC(probability=True),
+        #                                                           #KNeighborsClassifier(n_jobs=-1),
+        #                                                           #RandomForestClassifier(n_jobs=-1),
+        #                                                           #GradientBoostingClassifier(),
+        #                                                           #GaussianNB(),
+        #                                                           #DNNClassifier(feature_columns=[infer_real_valued_columns_from_input()], n_classes=2),
+        #                                                           ],
+        #                                              meta_classifier=LogisticRegression(n_jobs=-1))) #TODO switch this to StackingCVClassifier #TODO should be roughly .48 - .57, 2001 had a lot of upsets
+        #])
+        #('svm', SVC(probability=True)) # .489
+        #('bayes', LinearDiscriminantAnalysis()) # .504
+        #('mlp', MLPClassifier()), # .451
+        #('knn', KNeighborsClassifier()), # .563
+        ('rf', RandomForestClassifier())
+    #], memory=Memory(cachedir='.cache', verbose=0))
+    ])
 
     # variance = underfitting
     # bias = overfitting
@@ -106,42 +107,49 @@ def train_stacked_model(preseason_games, X_train, X_test, y_train, y_test):
     # boosting combines many high bias models to create better fit
     # bias increases and variance decreases with k in knn
     grid = {
-        'feature_engineering__results__types__mov__max_mov': [20, None],
-        'feature_engineering__results__types__pythag__exponent': [10.25, 13.91, 16.5],
-        'feature_engineering__results__types__sos__weights': [(.15, .15, .7), (.25, .5, .25), (.25, .25, .5)],
-        'feature_engineering__adj_stats1__markov__last_x_games': [5, 10, 20],
-        'feature_engineering__adj_stats2__offdef__last_x_games': [5, 10, 20],
-        'feature_engineering__derived_stats__selection__threshold': [.006, .008],
-        'feature_engineering__descriptive_stats__selection__n_features_to_select': [5, 10],
-        'feature_engineering__adj_stats1__selection__selection_threshold': [.25, .5],
-        'feature_engineering__adj_stats2__selection__selection_threshold': [.25, .5],
-        'stacked_classification__svc__C': [.1, 1, 10],
-        'stacked_classification__kneighborsclassifier__n_neighbors': [2, 4, 8, 16],
-        'stacked_classification__kneighborsclassifier__p': [1, 2, 3],
-        'stacked_classification__randomforestclassifier__n_estimators': [120, 300, 500],
-        'stacked_classification__randomforestclassifier__max_depth': [5, 8, 15, 25, None],
-        'stacked_classification__randomforestclassifier__min_samples_split': [2, 5, 10, 15],
-        'stacked_classification__randomforestclassifier__min_samples_leaf': [1, 2, 5, 10],
-        'stacked_classification__randomforestclassifier__max_features': ['log2', 'sqrt', None],
-        'stacked_classification__gradientboostingclassifier__max_depth': [3, 5, 7, 9, 12, 18],
-        'stacked_classification__gradientboostingclassifier__subsample': [.7, .9, 1],
-        'stacked_classification__gradientboostingclassifier__loss': ['deviance', 'exponential'],
-        'stacked_classification__gradientboostingclassifier__min_samples_split': [2, 5, 10, 15],
-        'stacked_classification__gradientboostingclassifier__max_features': ['log2', 'sqrt', None],
-        'stacked_classification__gradientboostingclassifier__min_samples_leaf': [1, 2, 5, 10],
-        'stacked_classification__gradientboostingclassifier__n_estimators': [120, 300, 500],
-        'stacked_classification__meta-logisticregression__C': [0.1, 1, 10.0]
+        'feature_engineering__pythag__exponent': [10.25], #also tried 13.91 and 16.5
+        'feature_engineering__sos__weights': [(.15, .15, .7)], # also tried (.25, .25, .5) and (.25, .5, .25)
+        #'feature_engineering__derived_stats__prune_garbage__threshold': [.007], # no features here was best
+        'feature_engineering__descriptive_stats__prune_garbage__threshold': [.007], # also tried .006 and .008
+        'feature_engineering__markov__last_x_games': [0], # also tried 7 and 14
+        'feature_engineering__offdef__last_x_games': [0], # also tried 5 and 10
+        'preprocessing__skew__max_skew': [.75], # also tried 3
+        'preprocessing__skew__technique': ['log'], # also tried 'sqrt', 'boxcox', and None
+        'feature_select__k': [40],
+        #'svm__kernel': ['linear'], # also tried rbf
+        #'mlp__hidden_layer_sizes': [(15,)], # http://stats.stackexchange.com/questions/181/how-to-choose-the-number-of-hidden-layers-and-nodes-in-a-feedforward-neural-netw
+        #'knn__n_neighbors': [50],
+        'rf__n_estimators': [300], # also tried 100 and 500
+        
+        'rf__max_depth': [5, None],
+        'rf__min_samples_split': [2, 5, 10],
+        'rf__min_samples_leaf': [1, 2, 5],
+        
+        #'gb__max_depth': [3, 5, 7],
+        #'gb__subsample': [.6, .8, 1],
+        #'gb__loss': ['deviance', 'exponential'],
+        #'gb__min_samples_split': [2, 5, 10],
+        #'gb__max_features': ['log2', 'sqrt', None],
+        #'gb__min_samples_leaf': [1, 2, 5],
+        #'gb__n_estimators': [100, 300, 500],
+        
+        
+        #'stacked_classification__meta-logisticregression__C': [.01, .1, 1]
+        #'stacked_classification__meta-logisticregression__penalty': ['l1', 'l2']
     }
 
-    cv = TimeSeriesSplit(n_splits=5) # 5 or 10 splits is good for balancing bias/variance
-    model = GridSearchCV(estimator=pipe, param_grid=grid, cv=cv, scoring='neg_log_loss', n_jobs=-1)
+    cv = StratifiedKFold(n_splits=2)
+    #cv = TimeSeriesSplit(n_splits=2) #TODO 5 or 10 splits is good for balancing bias/variance
+    #model = GridSearchCV(estimator=pipe, param_grid=grid, cv=cv, scoring='neg_log_loss', n_jobs=-1) #TODO different metric
+    model = GridSearchCV(estimator=pipe, param_grid=grid, cv=cv, n_jobs=-1) #TODO different metric
 
     model.fit(X_train, y_train)
 
     if len(X_test) > 0:
-        y_predict = model.predict_proba(X_test)
-        print(log_loss(y_test, y_predict))
-        #TODO roc curve here
-        #TODO confusion matrix here
+        y_predict_probas = model.predict_proba(X_test)
+        print(log_loss(y_test, y_predict_probas))
+        plot_auc(y_test, y_predict_probas[:, 1])
+        y_predict = model.predict(X_test)
+        plot_confusion_matrix(y_test, y_predict)
 
     return model

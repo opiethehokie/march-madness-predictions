@@ -17,6 +17,7 @@ RUN apt-get update && \
                        python3-pip \
                        python3-setuptools \
                        python3-scipy \
+                       python3-tk \
                        zlib1g-dev && \
     update-alternatives --set libblas.so.3 /usr/lib/openblas-base/libblas.so.3 && \
     update-alternatives --set liblapack.so.3 /usr/lib/lapack/liblapack.so.3 && \
@@ -25,6 +26,7 @@ RUN apt-get update && \
 RUN LLVM_CONFIG=/usr/bin/llvm-config-3.8 python3 -m pip --no-cache-dir install llvmlite numba
 
 RUN python3 -m pip --no-cache-dir install bottleneck \
+                                          matplotlib \
                                           pandas \
                                           pylint \
                                           pypandoc \
@@ -37,7 +39,7 @@ RUN python3 -m pip --no-cache-dir install sklearn-deap
 #RUN python3 -c 'import bottleneck; bottleneck.test();' && \
 #    python3 -c 'import numexpr; numexpr.test();' && \
 #    python3 -c 'import numpy; numpy.test();' && \
-#    python3 -c "import pandas; pandas.test();"
+#    python3 -c 'import pandas; pandas.test();'
 #    python3 -c 'import scipy; scipy.test();' && \
 #    nosetests3 sklearn
 
