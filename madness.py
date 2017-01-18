@@ -29,7 +29,7 @@ from ml.simulations import simulate_tourney
 from ml.wrangling import custom_train_test_split, filter_outlier_games, oversample_tourney_games
 
 
-numpy.random.seed(42) # helps get similar results for everyone run
+numpy.random.seed(1) # helps get repeatable results
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2015.csv'
 SEASON_DATA_FILE = 'data/regular_season_detailed_results_2016.csv'
@@ -50,23 +50,20 @@ def clean_raw_data(start_year, start_day):
     season = data.pipe(lambda df: df[df.Season >= start_year]).pipe(lambda df: df[df.Daynum >= start_day])
     return preseason, season
 
-def write_predictions(matchups, predictions, ext=''):
-    with open(SUBMISSION_FILE.replace('.csv', ext + '.csv'), 'w') as csvfile:
+def write_predictions(matchups, predictions, suffix=''):
+    with open(SUBMISSION_FILE.replace('.csv', suffix + '.csv'), 'w') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['Id', 'Pred'])
         writer.writerows(numpy.column_stack((matchups, predictions)))
 
-def differentiate_predictions(matchups, predictions):
+def differentiate_final_predictions(matchups, predictions, new_value):
+    diff_predictions = list(predictions)
     slots = championship_pairings()
     seeds = team_seed_mapping()
-    predictions0 = predictions
-    predictions1 = predictions
     for idx, matchup in enumerate(matchups):
         if possible_tourney_final(slots, seeds, matchup):
-            predictions0[idx] = 0
-            predictions1[idx] = 1
-    assert numpy.count_nonzero(predictions0) == len(predictions) / 2
-    return predictions0, predictions1
+            diff_predictions[idx] = new_value
+    return diff_predictions
 
 def read_predictions():
     with open(SUBMISSION_FILE) as csvfile:
@@ -123,7 +120,7 @@ def championship_pairings():
 
 
 start_years = [2013] #TODO 9, 11, 13
-start_days = [50] #TODO 30, 45, 60
+start_days = [45] #TODO 30, 45, 60
 
 for y in start_years:
     for d in start_days:
@@ -134,15 +131,11 @@ for y in start_years:
         X_train, X_test, y_train, y_test = custom_train_test_split(games, 2015)
         model = train_stacked_model(preseason_games, X_train, X_test, y_train, y_test)
 
-        persist_model(model)
-        model = load_persisted_model()
-
         predict_matchups, X_predict = possible_tourney_matchups()
         y_predict = model.predict_proba(X_predict)[:,1]
         write_predictions(predict_matchups, y_predict)
 
         simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
-        
-        y_predict0, y_predict1 = differentiate_predictions(predict_matchups, y_predict)
-        write_predictions(predict_matchups, y_predict0, '_0')
-        write_predictions(predict_matchups, y_predict1, '_1')
+
+        write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
+        write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')

@@ -97,7 +97,7 @@ class ModifiedRPITransformer(BaseEstimator, TransformerMixin):
         for opponent in opponents:
             win_percent = self._opponents_win_percent(season_results, season_results[opponent]['opponents'])
             win_percents.append(win_percent)
-        return sum(win_percents) / len(opponents)
+        return sum(win_percents) / len(opponents) if len(opponents) > 0 else 0
 
     def transform(self, X):
         rpis = []
@@ -147,8 +147,8 @@ class DebugFeatureImportances(BaseEstimator, TransformerMixin):
     def __init__(self, model):
         self.model = model
 
-    def fit(self, _X, _y=None):
-        tmp = self.model.fit(_X, _y)
+    def fit(self, X, _y=None):
+        tmp = self.model.fit(X, _y)
         if hasattr(self.model, 'scores_'):
             print(sorted(self.model.scores_, reverse=True)[0: 50])
         elif hasattr(self.model.estimator_, 'coef'):
@@ -164,8 +164,8 @@ class DebugFeatureImportances(BaseEstimator, TransformerMixin):
 # should also set n_jobs=1
 class DebugFeatureProperties(BaseEstimator, TransformerMixin):
 
-    def fit(self, _X, _y=None):
-        df = pandas.DataFrame(_X)
+    def fit(self, X, _y=None):
+        df = pandas.DataFrame(X)
         print(df.shape)
         print(df.describe())
         print(df.head(5))
@@ -281,7 +281,7 @@ class RatingTransformer(BaseEstimator, TransformerMixin):
         self.adj_stats = None
 
     def fit(self, X, _y=None):
-        self.teams = wrangling.all_teams(X)
+        self.teams = wrangling.all_teams(pandas.concat([self.preseason_games, X], ignore_index=True))
         previous_games = defaultdict(partial(defaultdict, list))
         for row in self.preseason_games.itertuples(index=False):
             previous_games[row.Season][row.Wteam].append(row)

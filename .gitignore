@@ -3,6 +3,6 @@ __pycache__
 .cache
 results/*.pkl
 results/out.txt
-results/submission.csv
+results/submission*.csv
 results/*.png
 TODO

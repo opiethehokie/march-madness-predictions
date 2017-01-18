@@ -27,6 +27,7 @@ from sklearn.metrics import confusion_matrix, roc_curve
 def plot_scatter_matrix(df):
     scatter_matrix(df)
     plt.savefig('results/scatter.png')
+    plt.close()
 
 def plot_auc(actual_y, predicted_y):
     fpr, tpr, _ = roc_curve(actual_y, predicted_y)
@@ -38,6 +39,7 @@ def plot_auc(actual_y, predicted_y):
     plt.title('ROC curve')
     plt.legend(loc='best')
     plt.savefig('results/auc.png')
+    plt.close()
 
 def plot_confusion_matrix(actual_y, predicted_y):
     matrix = confusion_matrix(actual_y, predicted_y)
@@ -57,3 +59,4 @@ def plot_confusion_matrix(actual_y, predicted_y):
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
     plt.savefig('results/confusion.png')
+    plt.close()
