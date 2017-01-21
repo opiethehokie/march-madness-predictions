@@ -5,4 +5,5 @@
 
 docker build -t madness .
 
-docker run --rm -it -v $PWD:/workdir madness /bin/bash -c "python3 -m pip freeze > /workdir/requirements.txt"
+docker run --rm -it -v $PWD:/workdir madness /bin/bash -c "python3 -m pip freeze > /workdir/python_requirements.txt"
+docker run --rm -it -v $PWD:/workdir madness /bin/bash -c "dpkg -l > /workdir/linux_packages.txt"

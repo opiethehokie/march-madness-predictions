@@ -3,7 +3,7 @@
 rm -rf $(find . | grep __pycache__)
 rm -rf $(find . | grep *.pyc)
 
-#docker run --rm -it -v $PWD:/workdir madness pylint ml
-#docker run --rm -it -v $PWD:/workdir madness pylint ratings
+docker run --rm -it -v $PWD:/workdir madness pylint ml
+docker run --rm -it -v $PWD:/workdir madness pylint ratings
 
 docker run --rm -it -v $PWD:/workdir madness pytest

@@ -22,8 +22,6 @@ import yamlordereddictloader
 
 from collections import defaultdict
 
-from sklearn.externals import joblib
-
 from ml.classification import train_stacked_model
 from ml.simulations import simulate_tourney
 from ml.wrangling import custom_train_test_split, filter_outlier_games, oversample_tourney_games
@@ -33,21 +31,18 @@ numpy.random.seed(1) # helps get repeatable results
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2015.csv'
 SEASON_DATA_FILE = 'data/regular_season_detailed_results_2016.csv'
-SAMPLE_SUBMISSION_FILE = 'results/sample_submission_2015.csv'
 SUBMISSION_FILE = 'results/submission.csv'
 TEAMS_FILE = 'data/teams.csv'
 SEEDS_FILE = 'data/seeds_2016.csv'
 SLOTS_FILE = 'data/slots_2016.csv'
-TOURNEY_FORMAT_FILE = 'data/tourney_format_2015.yml'
-PERSISTED_MODEL_FILE = 'results/stacked-model.pkl'
 
 
-def clean_raw_data(start_year, start_day):
+def clean_raw_data(year, day):
     def read_data(results_file):
         return pandas.read_csv(results_file)           
     data = pandas.concat([read_data(SEASON_DATA_FILE), read_data(TOURNEY_DATA_FILE)]).sort_values(by='Daynum')
-    preseason = data.pipe(lambda df: df[df.Season >= start_year]).pipe(lambda df: df[df.Daynum < start_day])
-    season = data.pipe(lambda df: df[df.Season >= start_year]).pipe(lambda df: df[df.Daynum >= start_day])
+    preseason = data.pipe(lambda df: df[df.Season >= year]).pipe(lambda df: df[df.Daynum < day])
+    season = data.pipe(lambda df: df[df.Season >= year]).pipe(lambda df: df[df.Daynum >= day])
     return preseason, season
 
 def write_predictions(matchups, predictions, suffix=''):
@@ -71,12 +66,6 @@ def read_predictions():
         reader = csv.reader(lines)
         predictions = { k[5:]:float(v) for k, v in reader }
     return predictions
-
-def persist_model(m):
-    joblib.dump(m.best_estimator_, PERSISTED_MODEL_FILE)
-
-def load_persisted_model():
-    return joblib.load(PERSISTED_MODEL_FILE)
 
 def possible_tourney_matchups():
     matchups = pandas.read_csv(SAMPLE_SUBMISSION_FILE)['Id']
@@ -119,23 +108,29 @@ def championship_pairings():
     return slots
 
 
-start_years = [2013] #TODO 9, 11, 13
-start_days = [45] #TODO 30, 45, 60
+start_year = 2013
+start_day = 30
+predict_year = 2015
 
-for y in start_years:
-    for d in start_days:
-        preseason_games, games = clean_raw_data(start_year=y, start_day=d)
-        games = filter_outlier_games(games, m=6)
-        games = oversample_tourney_games(games, factor=10)
+SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
+TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
 
-        X_train, X_test, y_train, y_test = custom_train_test_split(games, 2015)
-        model = train_stacked_model(preseason_games, X_train, X_test, y_train, y_test)
+outlier_std_devs = 6
+tourney_multiplyer = 10
 
-        predict_matchups, X_predict = possible_tourney_matchups()
-        y_predict = model.predict_proba(X_predict)[:,1]
-        write_predictions(predict_matchups, y_predict)
 
-        simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
+preseason_games, games = clean_raw_data(start_year, start_day)
+games = filter_outlier_games(games, outlier_std_devs)
+games = oversample_tourney_games(games, tourney_multiplyer)
 
-        write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
-        write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
+X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
+model = train_stacked_model(preseason_games, X_train, X_test, y_train, y_test)
+
+predict_matchups, X_predict = possible_tourney_matchups()
+y_predict = model.predict_proba(X_predict)[:,1]
+write_predictions(predict_matchups, y_predict)
+
+simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
+
+write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
+write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')

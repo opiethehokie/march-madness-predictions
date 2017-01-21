@@ -175,6 +175,7 @@ class DebugFeatureProperties(BaseEstimator, TransformerMixin):
         visualizations.plot_scatter_matrix(df)
         return self
 
+    #pylint: disable=no-self-use
     def transform(self, X):
         return X
 
@@ -197,6 +198,7 @@ class StatTransformer(BaseEstimator, TransformerMixin):
         self.stat_F = stat_F
         self.stats = None
 
+    #pylint: disable=too-many-statements
     def fit(self, X, _y=None):
         self.stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
         for row in X.itertuples(index=False):
@@ -364,3 +366,43 @@ class SkewnessTransformer(BaseEstimator, TransformerMixin):
             for idx in very_skewed_feats.index:
                 transformed[idx] = boxcox(X[idx]+1)[0]
         return transformed
+
+class OvertimeTransformer(BaseEstimator, TransformerMixin):
+
+    def fit(self, _X, _y=None):
+        return self
+
+    #pylint: disable=no-self-use
+    def transform(self, X):
+        for row in X.itertuples(index=True):
+            if row.Numot > 0:
+                ot_adj = 40 / (40 + row.Numot * 5)
+                X.set_value(row.Index, 'Wscore', row.Wscore * ot_adj)
+                X.set_value(row.Index, 'Lscore', row.Lscore * ot_adj)
+                X.set_value(row.Index, 'Wfgm', row.Wfgm * ot_adj)
+                X.set_value(row.Index, 'Lfgm', row.Lfgm * ot_adj)
+                X.set_value(row.Index, 'Wfga', row.Wfga * ot_adj)
+                X.set_value(row.Index, 'Lfga', row.Lfga * ot_adj)
+                X.set_value(row.Index, 'Wfgm3', row.Wfgm3 * ot_adj)
+                X.set_value(row.Index, 'Lfgm3', row.Lfgm3 * ot_adj)
+                X.set_value(row.Index, 'Wfga3', row.Wfga3 * ot_adj)
+                X.set_value(row.Index, 'Lfga3', row.Lfga3 * ot_adj)
+                X.set_value(row.Index, 'Wftm', row.Wftm * ot_adj)
+                X.set_value(row.Index, 'Lftm', row.Lftm * ot_adj)
+                X.set_value(row.Index, 'Wfta', row.Wfta * ot_adj)
+                X.set_value(row.Index, 'Lfta', row.Lfta * ot_adj)
+                X.set_value(row.Index, 'Wor', row.Wor * ot_adj)
+                X.set_value(row.Index, 'Lor', row.Lor * ot_adj)
+                X.set_value(row.Index, 'Wdr', row.Wdr * ot_adj)
+                X.set_value(row.Index, 'Ldr', row.Ldr * ot_adj)
+                X.set_value(row.Index, 'Wast', row.Wast * ot_adj)
+                X.set_value(row.Index, 'Last', row.Last * ot_adj)
+                X.set_value(row.Index, 'Wto', row.Wto * ot_adj)
+                X.set_value(row.Index, 'Lto', row.Lto * ot_adj)
+                X.set_value(row.Index, 'Wstl', row.Wstl * ot_adj)
+                X.set_value(row.Index, 'Lstl', row.Lstl * ot_adj)
+                X.set_value(row.Index, 'Wblk', row.Wblk * ot_adj)
+                X.set_value(row.Index, 'Lblk', row.Lblk * ot_adj)
+                X.set_value(row.Index, 'Wpf', row.Wpf * ot_adj)
+                X.set_value(row.Index, 'Lpf', row.Lpf * ot_adj)
+        return X

@@ -16,7 +16,8 @@
 import numpy
 import pandas
 
-from ml.transformers import HomeCourtTransformer, ModifiedRPITransformer, RatingTransformer, SkewnessTransformer
+from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, OvertimeTransformer,
+                             RatingTransformer, SkewnessTransformer)
 
 
 def test_home_court_transformer():
@@ -76,3 +77,19 @@ def test_skew_transformer():
     assert not numpy.array_equal(skew.transform(data), data)
     skew = SkewnessTransformer(max_skew=100, technique='boxcox')
     assert numpy.array_equal(skew.transform(data), data)
+
+def test_overtime_transformer():
+    headers = ['Numot', 'Wscore', 'Wfgm', 'Wfga', 'Wfgm3', 'Wfga3', 'Wftm', 'Wfta',
+               'Wor', 'Wdr', 'Wast', 'Wto', 'Wstl', 'Wblk', 'Wpf', 'Lscore', 'Lfgm', 'Lfga',
+               'Lfgm3', 'Lfga3', 'Lftm', 'Lfta', 'Lor', 'Ldr', 'Last', 'Lto', 'Lstl', 'Lblk', 'Lpf']
+    box_score1 = [0, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]
+    box_score2 = [1, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]
+    box_score3 = [2, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]
+    X = pandas.DataFrame([box_score1, box_score2, box_score3], columns=headers)
+    assert numpy.array_equal(numpy.array([[0, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
+                                           100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+                                          [1, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
+                                           88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88],
+                                          [2, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
+                                           80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80]]),
+                             OvertimeTransformer().fit_transform(X))
