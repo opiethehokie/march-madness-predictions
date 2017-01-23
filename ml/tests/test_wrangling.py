@@ -12,4 +12,18 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-#https://en.wikipedia.org/wiki/Data_pre-processing
+
+from ml import wrangling
+
+
+def test_dervied_stats():
+    season_stats = {'score': [5, 5], 'score-against': [5, 2],
+                    'fgm': [5, 0], 'fgm-against': [5, 3],
+                    'fga': [5, 77], 'fga-against': [5, 3]}
+    assert len(wrangling.derive_stats(season_stats)) == 30
+
+def test_descriptive_stats():
+    season_stats = {'score': [5, 5]}
+    stats = wrangling.describe_stats(season_stats)
+    assert len(stats) == 5
+    assert stats == [5, 5, 0.0, 5.0, 5.0]
