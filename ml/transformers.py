@@ -375,7 +375,7 @@ class OvertimeTransformer(BaseEstimator, TransformerMixin):
     #pylint: disable=no-self-use
     def transform(self, X):
         for row in X.itertuples(index=True):
-            if row.Numot > 0:
+            if row.Daynum < TOURNEY_START_DAY and row.Numot > 0:
                 ot_adj = 40 / (40 + row.Numot * 5)
                 X.set_value(row.Index, 'Wscore', row.Wscore * ot_adj)
                 X.set_value(row.Index, 'Lscore', row.Lscore * ot_adj)

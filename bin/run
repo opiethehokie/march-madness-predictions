@@ -3,4 +3,4 @@
 rm -rf $(find . | grep __pycache__)
 rm -rf $(find . | grep *.pyc)
 
-time docker run --rm -it -v $PWD:/workdir -e MPLBACKEND=agg madness python3 madness.py | tee results/out.txt
+time docker run --rm -it -v $PWD:/workdir -e MPLBACKEND=agg madness python3 madness.py $1 | tee results/out.txt

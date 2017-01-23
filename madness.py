@@ -16,6 +16,7 @@
 import csv
 import numpy
 import pandas
+import sys
 import yaml
 
 import yamlordereddictloader
@@ -37,12 +38,17 @@ SEEDS_FILE = 'data/seeds_2016.csv'
 SLOTS_FILE = 'data/slots_2016.csv'
 
 
-def clean_raw_data(year, day):
+def clean_raw_data(syear, sday, eyear):
     def read_data(results_file):
         return pandas.read_csv(results_file)           
-    data = pandas.concat([read_data(SEASON_DATA_FILE), read_data(TOURNEY_DATA_FILE)]).sort_values(by='Daynum')
-    preseason = data.pipe(lambda df: df[df.Season >= year]).pipe(lambda df: df[df.Daynum < day])
-    season = data.pipe(lambda df: df[df.Season >= year]).pipe(lambda df: df[df.Daynum >= day])
+    data = (pandas.concat([read_data(SEASON_DATA_FILE), read_data(TOURNEY_DATA_FILE)])
+                  .sort_values(by='Daynum'))
+    preseason = (data.pipe(lambda df: df[df.Season >= syear])
+                     .pipe(lambda df: df[df.Season <= eyear])
+                     .pipe(lambda df: df[df.Daynum < sday]))
+    season = (data.pipe(lambda df: df[df.Season >= syear])
+                  .pipe(lambda df: df[df.Season <= eyear])
+                  .pipe(lambda df: df[df.Daynum >= sday]))
     return preseason, season
 
 def write_predictions(matchups, predictions, suffix=''):
@@ -108,9 +114,12 @@ def championship_pairings():
     return slots
 
 
-start_year = 2013
+# base hyperparameters
+
+predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2015
+
+start_year = predict_year - 3
 start_day = 30
-predict_year = 2015
 
 SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
 TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
@@ -119,18 +128,25 @@ outlier_std_devs = 6
 tourney_multiplyer = 10
 
 
-preseason_games, games = clean_raw_data(start_year, start_day)
+# initial pre-processing
+preseason_games, games = clean_raw_data(start_year, start_day, predict_year)
 games = filter_outlier_games(games, outlier_std_devs)
 games = oversample_tourney_games(games, tourney_multiplyer)
 
+# training
 X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
 model = train_stacked_model(preseason_games, X_train, X_test, y_train, y_test)
 
-predict_matchups, X_predict = possible_tourney_matchups()
-y_predict = model.predict_proba(X_predict)[:,1]
-write_predictions(predict_matchups, y_predict)
+if predict_year >= 2015:
 
-simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
+    # predict all possible tournament games for Kaggle competition
+    predict_matchups, X_predict = possible_tourney_matchups()
+    y_predict = model.predict_proba(X_predict)[:,1]
+    write_predictions(predict_matchups, y_predict)
 
-write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
-write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
+    # post-processing for Kaggle competition (two submissions means we can always get championship game correct)
+    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
+    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
+
+    # predict actual tournament bracket
+    simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
