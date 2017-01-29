@@ -33,7 +33,7 @@ def plot_auc(actual_y, predicted_y):
     fpr, tpr, _ = roc_curve(actual_y, predicted_y)
     plt.figure()
     plt.plot([0, 1], [0, 1], 'k--')
-    plt.plot(fpr, tpr, label='stacked logistic regression')
+    plt.plot(fpr, tpr, label='MLP')
     plt.xlabel('False positive rate')
     plt.ylabel('True positive rate')
     plt.title('ROC curve')

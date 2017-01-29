@@ -28,7 +28,7 @@ from ml.simulations import simulate_tourney
 from ml.wrangling import custom_train_test_split, filter_outlier_games, oversample_tourney_games
 
 
-numpy.random.seed(1) # helps get repeatable results
+numpy.random.seed(42) # helps get repeatable results
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2015.csv'
 SEASON_DATA_FILE = 'data/regular_season_detailed_results_2016.csv'
@@ -125,16 +125,17 @@ SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
 TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
 
 outlier_std_devs = 6
-tourney_multiplyer = 10
-
+tourney_multiplyer = 5
 
 # initial pre-processing
 preseason_games, games = clean_raw_data(start_year, start_day, predict_year)
 games = filter_outlier_games(games, outlier_std_devs)
+
+_, X_test, _, y_test = custom_train_test_split(games, predict_year)
 games = oversample_tourney_games(games, tourney_multiplyer)
 
 # training
-X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
+X_train, _, y_train, _ = custom_train_test_split(games, predict_year)
 model = train_stacked_model(preseason_games, X_train, X_test, y_train, y_test)
 
 if predict_year >= 2015:

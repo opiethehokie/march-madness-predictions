@@ -34,8 +34,6 @@ RUN python3 -m pip --no-cache-dir install bottleneck \
                                           scikit-learn \
                                           mlxtend
 
-RUN python3 -m pip --no-cache-dir install sklearn-deap
-
 #RUN python3 -c 'import bottleneck; bottleneck.test();' && \
 #    python3 -c 'import numexpr; numexpr.test();' && \
 #    python3 -c 'import numpy; numpy.test();' && \
