@@ -1,6 +1,6 @@
 # Machine Learning March Madness Predictions
 
-[Blog post describing methodology]()
+[Blog post describing methodology](http://www.programmingopiethehokie.com/2017/01/machine-learning-for-ncaa-basketball.html)
 
 ## Usage
 
