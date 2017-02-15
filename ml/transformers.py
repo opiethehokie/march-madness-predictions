@@ -31,31 +31,47 @@ TOURNEY_START_DAY = 136
 
 class HomeCourtTransformer(BaseEstimator, TransformerMixin):
 
-    def __init__(self):
-        self.home = 'H'
-        self.away = 'A'
+    def __init__(self, factor=.96):
+        self.factor = factor
 
     def fit(self, _X, _y=None):
         return self
 
+    #pylint: disable=no-self-use
     def transform(self, X):
-        onehot_home_court = []
-        for row in X.itertuples(index=False):
-            if row.Daynum >= TOURNEY_START_DAY:
-                onehot_home_court.append([0, 0])
-            elif row.Wloc != self.home and row.Wloc != self.away:
-                onehot_home_court.append([0, 0])
-            elif row.Wteam < row.Lteam:
-                if row.Wloc == self.home:
-                    onehot_home_court.append([1, 0])
-                else:
-                    onehot_home_court.append([0, 1])
-            else:
-                if row.Wloc == self.home:
-                    onehot_home_court.append([0, 1])
-                else:
-                    onehot_home_court.append([1, 0])
-        return numpy.array(onehot_home_court)
+        for row in X.itertuples(index=True):
+            if row.Daynum < TOURNEY_START_DAY and row.Wloc != 'N':
+                wadj = self.factor if row.Wloc == 'H' else 1 / self.factor
+                ladj = 2 - self.factor if row.Wloc == 'H' else self.factor
+                X.set_value(row.Index, 'Wscore', row.Wscore * wadj)
+                X.set_value(row.Index, 'Lscore', row.Lscore * ladj)
+                X.set_value(row.Index, 'Wfgm', row.Wfgm * wadj)
+                X.set_value(row.Index, 'Lfgm', row.Lfgm * ladj)
+                X.set_value(row.Index, 'Wfga', row.Wfga * wadj)
+                X.set_value(row.Index, 'Lfga', row.Lfga * ladj)
+                X.set_value(row.Index, 'Wfgm3', row.Wfgm3 * wadj)
+                X.set_value(row.Index, 'Lfgm3', row.Lfgm3 * ladj)
+                X.set_value(row.Index, 'Wfga3', row.Wfga3 * wadj)
+                X.set_value(row.Index, 'Lfga3', row.Lfga3 * ladj)
+                X.set_value(row.Index, 'Wftm', row.Wftm * wadj)
+                X.set_value(row.Index, 'Lftm', row.Lftm * ladj)
+                X.set_value(row.Index, 'Wfta', row.Wfta * wadj)
+                X.set_value(row.Index, 'Lfta', row.Lfta * ladj)
+                X.set_value(row.Index, 'Wor', row.Wor * wadj)
+                X.set_value(row.Index, 'Lor', row.Lor * ladj)
+                X.set_value(row.Index, 'Wdr', row.Wdr * wadj)
+                X.set_value(row.Index, 'Ldr', row.Ldr * ladj)
+                X.set_value(row.Index, 'Wast', row.Wast * wadj)
+                X.set_value(row.Index, 'Last', row.Last * ladj)
+                X.set_value(row.Index, 'Wto', row.Wto * wadj)
+                X.set_value(row.Index, 'Lto', row.Lto * ladj)
+                X.set_value(row.Index, 'Wstl', row.Wstl * wadj)
+                X.set_value(row.Index, 'Lstl', row.Lstl * ladj)
+                X.set_value(row.Index, 'Wblk', row.Wblk * wadj)
+                X.set_value(row.Index, 'Lblk', row.Lblk * ladj)
+                X.set_value(row.Index, 'Wpf', row.Wpf * wadj)
+                X.set_value(row.Index, 'Lpf', row.Lpf * ladj)
+        return X
 
 # http://netprophetblog.blogspot.com/2011/04/infinitely-deep-rpi.html
 # http://netprophetblog.blogspot.com/2011/04/rpi-distribution.html
@@ -189,7 +205,8 @@ class ColumnSelector(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        return X.iloc[:, self.start:self.end]
+        df = pandas.DataFrame(X)
+        return df.iloc[:, self.start:self.end]
 
 # http://netprophetblog.blogspot.com/2012/02/continued-slow-pursuit-of-statistical.html
 class StatTransformer(BaseEstimator, TransformerMixin):

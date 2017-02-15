@@ -20,7 +20,7 @@ def test_dervied_stats():
     season_stats = {'score': [5, 5], 'score-against': [5, 2],
                     'fgm': [5, 0], 'fgm-against': [5, 3],
                     'fga': [5, 77], 'fga-against': [5, 3]}
-    assert len(wrangling.derive_stats(season_stats)) == 30
+    assert len(wrangling.derive_stats(season_stats)) == 15
 
 def test_descriptive_stats():
     season_stats = {'score': [5, 5]}

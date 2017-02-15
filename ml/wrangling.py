@@ -54,7 +54,6 @@ def derive_stats(results):
     for stat1, stat2 in combinations:
         avg_stat1 = sum(results[stat1]) / len(results[stat1])
         avg_stat2 = sum(results[stat2]) / len(results[stat2])
-        derived.append(avg_stat1 * avg_stat2)
         derived.append(avg_stat1 / avg_stat2 if avg_stat2 > 0 else 0)
     return derived
 
