@@ -4,6 +4,8 @@ ENV TERM xterm
 ENV LANG en_US.UTF-8  
 ENV LC_ALL C
 
+ENV MPLBACKEND agg
+
 RUN apt-get update && \
     apt-get -y install build-essential \
                        libopenblas-dev \
