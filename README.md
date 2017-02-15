@@ -1,5 +1,7 @@
 # Machine Learning March Madness Predictions
 
+[![Build Status](https://travis-ci.org/opiethehokie/march-madness-predictions.svg?branch=master)](https://travis-ci.org/opiethehokie/march-madness-predictions)
+
 [Blog post describing methodology](http://www.programmingopiethehokie.com/2017/01/machine-learning-for-ncaa-basketball.html)
 
 ## Usage
