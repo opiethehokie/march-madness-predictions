@@ -1,8 +1,9 @@
 *.pyc
 __pycache__
 .cache
+.coverage
+.project
+.pydevproject
 results/out.txt
 results/submission*.csv
 results/*.png
-.project
-.pydevproject

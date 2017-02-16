@@ -1,10 +1,18 @@
 sudo: required
 
+language: python
+
 services:
   - docker
 
-before_install:
+notifications:
+  email: false
+
+install:
 - docker build -t madness .
 
 script:
-- docker run --rm -it -v $PWD:/workdir madness pytest
+- docker run --rm -it -v $PWD:/workdir madness pylint madness.py
+- docker run --rm -it -v $PWD:/workdir madness pylint ml
+- docker run --rm -it -v $PWD:/workdir madness pylint ratings
+- docker run --rm -it -v $PWD:/workdir madness py.test --cov=.

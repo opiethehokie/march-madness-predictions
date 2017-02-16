@@ -18,7 +18,7 @@ Predict tournament games:
 
 Run unit tests:
 
-`docker run --rm -it -v $PWD:/workdir madness pytest`
+`docker run --rm -it -v $PWD:/workdir madness py.test --cov=.`
 
 Run pylint static analysis:
 
