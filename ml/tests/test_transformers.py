@@ -17,8 +17,7 @@ import numpy
 import pandas
 import pytest
 
-from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, OvertimeTransformer,
-                             RatingTransformer, SkewnessTransformer)
+from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, OvertimeTransformer, SkewnessTransformer)
 
 
 @pytest.fixture
@@ -41,22 +40,6 @@ def test_rpi_transformer():
     assert rpi._opponents_win_percent(season_stats, [2, 3]) == .25
     assert rpi._opponents_opponents_win_percent(season_stats, [2, 3]) == .625
     assert rpi._rpi(season_stats, 1) == .25 * 1 + .5 * .25 + .25 * .625
-
-#pylint: disable=redefined-outer-name
-def test_calculate_stats_all(box_scores):
-    teams = {2010: {4:0, 6:1, 11:2}}
-    previous_games = {2010: {4: [box_scores.iloc[0], box_scores.iloc[2]], 6: [box_scores.iloc[1], box_scores.iloc[0]],
-                             11: [box_scores.iloc[2], box_scores.iloc[1]]}}
-    stats = RatingTransformer(None, pandas.DataFrame())._recalc_stats(teams, previous_games, 0)
-    assert numpy.any(stats[2010][0][1])
-    assert numpy.any(stats[2010][0][2])
-    assert numpy.any(stats[2010][1][0])
-    assert numpy.any(stats[2010][1][2])
-    assert numpy.any(stats[2010][2][0])
-    assert numpy.any(stats[2010][2][1])
-    assert not numpy.any(stats[2010][0][0])
-    assert not numpy.any(stats[2010][1][1])
-    assert not numpy.any(stats[2010][2][2])
 
 def test_skew_transformer():
     data = numpy.array([[9, 9, 1],

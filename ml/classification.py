@@ -23,13 +23,11 @@ from sklearn.neural_network.multilayer_perceptron import MLPClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import StandardScaler
 
-from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, OvertimeTransformer, PythagoreanExpectationTransformer,
-                             RatingTransformer, SkewnessTransformer, StatTransformer)
-#from ml.transformers import DebugFeatureImportances, DebugFeatureProperties
+from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, OvertimeTransformer,
+                             PythagoreanExpectationTransformer, RatingTransformer, SkewnessTransformer, StatTransformer)
+#from ml.transformers import DebugFeatureProperties
 from ml.visualizations import plot_auc, plot_confusion_matrix
-from ml.wrangling import describe_stats
-from ml.wrangling import derive_stats
-#from ratings import markov
+from ml.wrangling import describe_stats, derive_stats
 from ratings import off_def
 
 
@@ -60,7 +58,6 @@ def train_model(preseason_games, X_train, X_test, y_train, y_test):
         ('feature_engineering', FeatureUnion([
             ('luck', PythagoreanExpectationTransformer()),
             ('sos', ModifiedRPITransformer()),
-            #('markov', RatingTransformer(markov.markov_stats, preseason_games)),
             ('offdef', RatingTransformer(off_def.adjust_stats, preseason_games)),
             ('consistency', StatTransformer(describe_stats)),
             ('unknown', Pipeline([
@@ -72,8 +69,8 @@ def train_model(preseason_games, X_train, X_test, y_train, y_test):
         ('standardize', StandardScaler(with_std=False)),
         ('feature_selection', RandomizedLogisticRegression(random_state=random_state, n_jobs=1)),
         #('feature_debug', DebugFeatureProperties()),
-        ('mlp_classifier', MLPClassifier(random_state=random_state, max_iter=1000))
         #('baseline_classifier', DummyClassifier(strategy='uniform', random_state=random_state))
+        ('mlp_classifier', MLPClassifier(random_state=random_state, max_iter=1000))
     ])
 
     # http://stats.stackexchange.com/questions/181/how-to-choose-the-number-of-hidden-layers-and-nodes-in-a-feedforward-neural-netw
@@ -82,18 +79,16 @@ def train_model(preseason_games, X_train, X_test, y_train, y_test):
         'preprocess_hca__factor': [.96],
         'feature_engineering__luck__exponent': [10.25], # also tried 13.91 and 16.5
         'feature_engineering__sos__weights': [(.15, .15, .7)], # also tried (.25, .25, .5) and (.25, .5, .25)
-        'feature_engineering__offdef__last_x_games': [0],
         'feature_engineering__unknown__dimension_reduction__n_clusters': [50],
         'feature_engineering__unknown__dimension_reduction__affinity': ['cosine'],
         'feature_engineering__unknown__dimension_reduction__linkage': ['average'],
-        'preprocess_skew__max_skew': [2],
-        'preprocess_skew__technique': ['log'],
-        'mlp_classifier__activation': ['logistic'], # also tried relu
-        'mlp_classifier__hidden_layer_sizes': [(7)] # n+1 / 2 or 2n/3 + 1 or sqrt(n+1) or samples / 10 * n+1
+        'preprocess_skew__max_skew': [2.5],
+        'preprocess_skew__technique': ['log'], # box cox was almost as good
+        'mlp_classifier__activation': ['logistic'],
+        'mlp_classifier__hidden_layer_sizes': [(8)] # n+1 / 2 or 2n/3 + 1 or sqrt(n+1) or samples / 10 * n+1
     }
 
     # 5 or 10 splits is good for balancing bias/variance
-    # 5 could also match the number of years in training set
     cv = StratifiedKFold(n_splits=5, random_state=random_state)
 
     #model = RandomizedSearchCV(estimator=pipe, param_distributions=grid, scoring='neg_log_loss', cv=cv,

@@ -10,18 +10,31 @@ Build Docker image:
 
 `docker build -t madness .`
 
-Predict tournament games:
+Predict tournament games for years 2012 - 2016:
 
 `docker run --rm -it -v $PWD:/workdir madness python3 madness.py <year>`
 
 ## Development
 
-Run unit tests:
+Run basic unit tests:
+
+`docker run --rm -it -v $PWD:/workdir madness py.test --cov=. --ignore ml/tests/test_classification.py`
+
+Run all tests:
 
 `docker run --rm -it -v $PWD:/workdir madness py.test --cov=.`
 
 Run pylint static analysis:
 
 `docker run --rm -it -v $PWD:/workdir madness pylint madness.py && pylint ml && pylint ratings`
+
+Profile section of code:
+
+```python
+from ml.wrangling import profile
+
+@profile
+def slow_func() ...
+```
 
 

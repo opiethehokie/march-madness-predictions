@@ -16,8 +16,7 @@
 import cProfile
 import itertools
 import numpy
-
-from scipy import stats
+import scipy.stats
 
 
 TOURNEY_START_DAY = 136
@@ -37,7 +36,7 @@ def oversample_tourney_games(data, factor=5):
 
 def filter_outlier_games(data, m=3):
     numeric_data = data.select_dtypes(include=['int64'])
-    return data[(numpy.abs(stats.zscore(numeric_data)) < m).all(axis=1)]
+    return data[(numpy.abs(scipy.stats.zscore(numeric_data)) < m).all(axis=1)]
 
 def custom_train_test_split(data, predict_year):
     train_games = data[(data.Season != predict_year) | (data.Daynum < TOURNEY_START_DAY)]
