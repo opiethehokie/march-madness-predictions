@@ -29,15 +29,14 @@ from ml.wrangling import custom_train_test_split
 
 
 def test_model():
-    syear = 2013
-    eyear = 2013
+    year = 2013
     sday = 60
     data = pandas.concat([pandas.read_csv('data/regular_season_detailed_results_2016.csv'),
                           pandas.read_csv('data/tourney_detailed_results_2016.csv')]).sort_values(by='Daynum')
-    games = (data.pipe(lambda df: df[df.Season >= syear])
-             .pipe(lambda df: df[df.Season <= eyear])
+    games = (data.pipe(lambda df: df[df.Season >= year])
+             .pipe(lambda df: df[df.Season <= year])
              .pipe(lambda df: df[df.Daynum >= sday]))
-    X_train, X_test, y_train, y_test = custom_train_test_split(games, eyear)
+    X_train, X_test, y_train, y_test = custom_train_test_split(games, year)
     start_time = time.time()
     model = train_model(None, X_train, X_test, y_train, y_test)
     end_time = time.time()
@@ -50,6 +49,6 @@ def test_model():
     joblib.dump(model, file)
     persisted_model = joblib.load(file)
 
-    fake_boxscores = [[2013, 137, 1361, 1328]]
+    fake_boxscores = [[year, 137, 1361, 1328]]
     X_predict = pandas.DataFrame(fake_boxscores, columns=['Season', 'Daynum', 'Wteam', 'Lteam'])
     assert numpy.array_equal(persisted_model.predict_proba(X_predict), model.predict_proba(X_predict))
