@@ -25,7 +25,7 @@ RUN apt-get update && \
     update-alternatives --set liblapack.so.3 /usr/lib/lapack/liblapack.so.3 && \
     rm -rf /var/lib/apt/lists/*
 
-RUN LLVM_CONFIG=/usr/bin/llvm-config-3.8 python3 -m pip --no-cache-dir install llvmlite numba
+RUN LLVM_CONFIG=/usr/bin/llvm-config-3.8 python3 -m pip --no-cache-dir install llvmlite==0.15.0 numba
 
 RUN python3 -m pip --no-cache-dir install bottleneck \
                                           matplotlib \
