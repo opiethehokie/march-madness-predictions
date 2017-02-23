@@ -4,6 +4,8 @@ ENV TERM xterm
 ENV LANG en_US.UTF-8  
 ENV LC_ALL C
 
+ENV MPLBACKEND agg
+
 RUN apt-get update && \
     apt-get -y install build-essential \
                        libopenblas-dev \
@@ -23,7 +25,7 @@ RUN apt-get update && \
     update-alternatives --set liblapack.so.3 /usr/lib/lapack/liblapack.so.3 && \
     rm -rf /var/lib/apt/lists/*
 
-RUN LLVM_CONFIG=/usr/bin/llvm-config-3.8 python3 -m pip --no-cache-dir install llvmlite numba
+RUN LLVM_CONFIG=/usr/bin/llvm-config-3.8 python3 -m pip --no-cache-dir install llvmlite==0.15.0 numba
 
 RUN python3 -m pip --no-cache-dir install bottleneck \
                                           matplotlib \
@@ -31,6 +33,7 @@ RUN python3 -m pip --no-cache-dir install bottleneck \
                                           pylint \
                                           pypandoc \
                                           pytest \
+                                          pytest-cov \
                                           scikit-learn \
                                           mlxtend
 
@@ -40,9 +43,6 @@ RUN python3 -m pip --no-cache-dir install bottleneck \
 #    python3 -c 'import pandas; pandas.test();'
 #    python3 -c 'import scipy; scipy.test();' && \
 #    nosetests3 sklearn
-
-RUN python3 -m pip --no-cache-dir install --upgrade https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-0.11.0rc2-cp35-cp35m-linux_x86_64.whl && \
-    python3 -c 'import tensorflow;'
 
 RUN python3 -m pip --no-cache-dir install pyyaml \
                                           yamlordereddictloader

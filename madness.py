@@ -14,23 +14,23 @@
 
 
 import csv
-import numpy
-import pandas
 import sys
-import yaml
-
-import yamlordereddictloader
 
 from collections import defaultdict
 
-from ml.classification import train_stacked_model
+import numpy
+import pandas
+import yaml
+import yamlordereddictloader
+
+from ml.classification import train_model
 from ml.simulations import simulate_tourney
 from ml.wrangling import custom_train_test_split, filter_outlier_games, oversample_tourney_games
 
 
 numpy.random.seed(42) # helps get repeatable results
 
-TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2015.csv'
+TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2016.csv'
 SEASON_DATA_FILE = 'data/regular_season_detailed_results_2016.csv'
 SUBMISSION_FILE = 'results/submission.csv'
 TEAMS_FILE = 'data/teams.csv'
@@ -40,15 +40,15 @@ SLOTS_FILE = 'data/slots_2016.csv'
 
 def clean_raw_data(syear, sday, eyear):
     def read_data(results_file):
-        return pandas.read_csv(results_file)           
+        return pandas.read_csv(results_file)
     data = (pandas.concat([read_data(SEASON_DATA_FILE), read_data(TOURNEY_DATA_FILE)])
-                  .sort_values(by='Daynum'))
+            .sort_values(by='Daynum'))
     preseason = (data.pipe(lambda df: df[df.Season >= syear])
-                     .pipe(lambda df: df[df.Season <= eyear])
-                     .pipe(lambda df: df[df.Daynum < sday]))
+                 .pipe(lambda df: df[df.Season <= eyear])
+                 .pipe(lambda df: df[df.Daynum < sday]))
     season = (data.pipe(lambda df: df[df.Season >= syear])
-                  .pipe(lambda df: df[df.Season <= eyear])
-                  .pipe(lambda df: df[df.Daynum >= sday]))
+              .pipe(lambda df: df[df.Season <= eyear])
+              .pipe(lambda df: df[df.Daynum >= sday]))
     return preseason, season
 
 def write_predictions(matchups, predictions, suffix=''):
@@ -70,7 +70,7 @@ def read_predictions():
     with open(SUBMISSION_FILE) as csvfile:
         lines = csvfile.readlines()[1:]
         reader = csv.reader(lines)
-        predictions = { k[5:]:float(v) for k, v in reader }
+        predictions = {k[5:]:float(v) for k, v in reader}
     return predictions
 
 def possible_tourney_matchups():
@@ -86,14 +86,14 @@ def possible_tourney_final(slots, seeds, matchup):
     teama_region = seeds[year][teama][0]
     teamb_region = seeds[year][teamb][0]
     (champ_regions1, champ_regions2) = slots[year]
-    return ((champ_regions1.find(teama_region) > -1 and champ_regions2.find(teamb_region) > -1) or 
+    return ((champ_regions1.find(teama_region) > -1 and champ_regions2.find(teamb_region) > -1) or
             (champ_regions2.find(teama_region) > -1 and champ_regions1.find(teamb_region) > -1))
 
 def team_id_mapping():
     with open(TEAMS_FILE) as csvfile:
         lines = csvfile.readlines()[1:]
         reader = csv.reader(lines)
-        teams = { v:int(k) for k, v in reader }
+        teams = {v:int(k) for k, v in reader}
     return teams
 
 def team_seed_mapping():
@@ -118,7 +118,7 @@ def championship_pairings():
 
 predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2015
 
-start_year = predict_year - 3
+start_year = predict_year - 4
 start_day = 30
 
 SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
@@ -136,13 +136,13 @@ games = oversample_tourney_games(games, tourney_multiplyer)
 
 # training
 X_train, _, y_train, _ = custom_train_test_split(games, predict_year)
-model = train_stacked_model(preseason_games, X_train, X_test, y_train, y_test)
+model = train_model(preseason_games, X_train, X_test, y_train, y_test)
 
 if predict_year >= 2015:
 
     # predict all possible tournament games for Kaggle competition
     predict_matchups, X_predict = possible_tourney_matchups()
-    y_predict = model.predict_proba(X_predict)[:,1]
+    y_predict = model.predict_proba(X_predict)[:, 1]
     write_predictions(predict_matchups, y_predict)
 
     # post-processing for Kaggle competition (two submissions means we can always get championship game correct)

@@ -27,7 +27,7 @@ def markov_stats(stats):
         for i in range(stats[season].shape[-1]):
             stat = stats[season][..., i]
             cols.append(markov_ratings(stat))
-        ratings[season] = numpy.array(cols).transpose()
+        ratings[season] = numpy.array(cols).T
     return ratings
 
 def markov_ratings(stat, perturbation=1e-4):
