@@ -51,8 +51,8 @@ def derive_stats(results):
     derived = []
     combinations = itertools.combinations(results.keys(), 2)
     for stat1, stat2 in combinations:
-        avg_stat1 = sum(results[stat1]) / len(results[stat1])
-        avg_stat2 = sum(results[stat2]) / len(results[stat2])
+        avg_stat1 = sum(results[stat1]) / len(results[stat1]) if len(results[stat1]) > 0 else 0 
+        avg_stat2 = sum(results[stat2]) / len(results[stat2]) if len(results[stat2]) > 0 else 0
         derived.append(avg_stat1 / avg_stat2 if avg_stat2 > 0 else 0)
     return derived
 

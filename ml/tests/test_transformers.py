@@ -45,13 +45,13 @@ def test_skew_transformer():
     data = numpy.array([[9, 9, 1],
                         [8, 9, 2],
                         [1, 1, 1]])
-    skew = SkewnessTransformer(max_skew=.7, technique='sqrt')
+    skew = SkewnessTransformer(max_skew=.7, lmbda=.5)
     assert not numpy.array_equal(skew.transform(data), data)
-    skew = SkewnessTransformer(max_skew=.5, technique='log')
+    skew = SkewnessTransformer(max_skew=.5, lmbda=0)
     assert not numpy.array_equal(skew.transform(data), data)
-    skew = SkewnessTransformer(max_skew=.5, technique='boxcox')
+    skew = SkewnessTransformer(max_skew=.5, lmbda=None)
     assert not numpy.array_equal(skew.transform(data), data)
-    skew = SkewnessTransformer(max_skew=100, technique='boxcox')
+    skew = SkewnessTransformer(max_skew=100, lmbda=None)
     assert numpy.array_equal(skew.transform(data), data)
 
 #pylint: disable=redefined-outer-name

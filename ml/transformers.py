@@ -104,7 +104,7 @@ class ModifiedRPITransformer(BaseEstimator, TransformerMixin):
         win_percents = []
         for opponent in opponents:
             results = season_results[opponent]['results']
-            win_percent = sum(results) / len(results)
+            win_percent = sum(results) / len(results) if len(results) > 0 else 0
             win_percents.append(win_percent)
         return sum(win_percents) / len(opponents) if len(opponents) > 0 else 0
 
@@ -144,7 +144,9 @@ class PythagoreanExpectationTransformer(BaseEstimator, TransformerMixin):
     def _pythagorean_expectation(self, results):
         points = numpy.sum(results['points'])
         points_against = numpy.sum(results['points-against'])
-        return points**self.exponent / (points**self.exponent + points_against**self.exponent)
+        numerator = points**self.exponent
+        denomenator = points**self.exponent + points_against**self.exponent
+        return numerator / denomenator if denomenator != 0 else 0
 
     def transform(self, X):
         pythags = []
@@ -264,6 +266,8 @@ class StatTransformer(BaseEstimator, TransformerMixin):
         for row in X.itertuples(index=False):
             wstats = self.stat_F(self.stats[row.Season][row.Wteam])
             lstats = self.stat_F(self.stats[row.Season][row.Lteam])
+            if len(wstats) == 0: wstats = [0] * int(len(compiled_stats[0]) / 2)
+            if len(lstats) == 0: lstats = [0] * int(len(compiled_stats[0]) / 2)
             if row.Wteam < row.Lteam:
                 compiled_stats.append(numpy.hstack((wstats, lstats)))
             else:
@@ -272,7 +276,7 @@ class StatTransformer(BaseEstimator, TransformerMixin):
 
 class RatingTransformer(BaseEstimator, TransformerMixin):
 
-    def __init__(self, rating_F, preseason_games):
+    def __init__(self, rating_F, preseason_games=None):
         self.rating_F = rating_F
         self.preseason_games = preseason_games
         self.adj_stats = None
@@ -283,8 +287,8 @@ class RatingTransformer(BaseEstimator, TransformerMixin):
             X = pandas.concat([self.preseason_games, X], ignore_index=True)
         self.teams = wrangling.all_teams(X)
         seasons = numpy.unique(X['Season'])
-        stat_categories = {x:i for i, x in enumerate(['eff_field_goal_percent', 'rebound_rate', 'free_throw_rate', 'turnover_rate',
-                                                      'assist_rate', 'block_rate', 'steal_rate', 'score_rate', 'foul_rate'])}
+        stat_categories = {x:i for i, x in enumerate(['eff_field_goal_percent', 'true_shooting', 'rebound_rate', 'free_throw_rate',
+                                                      'turnover_rate', 'assist_rate', 'block_rate', 'steal_rate', 'score_rate', 'foul_rate'])}
         stats = {season: numpy.zeros((len(self.teams[season]), len(self.teams[season]), len(stat_categories))) for season in seasons}
         recalc = False
         for row in X.itertuples(index=False):
@@ -296,6 +300,8 @@ class RatingTransformer(BaseEstimator, TransformerMixin):
                 lposs = row.Lfga - row.Lor + row.Lto + .475 * row.Lfta
                 stats[row.Season][wteam_id][lteam_id][stat_categories['eff_field_goal_percent']] += ((row.Wfgm + .5 * row.Wfgm3) / row.Wfga)
                 stats[row.Season][lteam_id][wteam_id][stat_categories['eff_field_goal_percent']] += ((row.Lfgm + .5 * row.Lfgm3) / row.Lfga)
+                stats[row.Season][wteam_id][lteam_id][stat_categories['true_shooting']] += (.5 * row.Wscore / (row.Wfga + 0.475 * row.Wfta))
+                stats[row.Season][lteam_id][wteam_id][stat_categories['true_shooting']] += (.5 * row.Lscore / (row.Lfga + 0.475 * row.Lfta))
                 stats[row.Season][wteam_id][lteam_id][stat_categories['rebound_rate']] += row.Wor / (row.Wor + row.Ldr)
                 stats[row.Season][lteam_id][wteam_id][stat_categories['rebound_rate']] += row.Lor / (row.Lor + row.Wdr)
                 stats[row.Season][wteam_id][lteam_id][stat_categories['free_throw_rate']] += (row.Wfta / row.Wftm) if row.Wftm > 0 else 0
@@ -328,11 +334,54 @@ class RatingTransformer(BaseEstimator, TransformerMixin):
                 ratings.append(numpy.hstack((lrating, wrating)))
         return numpy.array(ratings)
 
+class SimpleRatingTransformer(BaseEstimator, TransformerMixin):
+
+    def __init__(self, rating_F, preseason_games=None):
+        self.rating_F = rating_F
+        self.preseason_games = preseason_games
+        self.adj_stats = None
+        self.teams = None
+
+    def fit(self, X, _y=None):
+        if self.preseason_games is not None:
+            X = pandas.concat([self.preseason_games, X], ignore_index=True)
+        self.teams = wrangling.all_teams(X)
+        seasons = numpy.unique(X['Season'])
+        stat_categories = {x:i for i, x in enumerate(['points'])}
+        stats = {season: numpy.zeros((len(self.teams[season]), len(self.teams[season]), len(stat_categories))) for season in seasons}
+        recalc = False
+        for row in X.itertuples(index=False):
+            if row.Daynum < TOURNEY_START_DAY:
+                recalc = True
+                wteam_id = self.teams[row.Season][row.Wteam]
+                lteam_id = self.teams[row.Season][row.Lteam]
+                stats[row.Season][wteam_id][lteam_id][stat_categories['points']] += row.Wscore
+                stats[row.Season][lteam_id][wteam_id][stat_categories['points']] += row.Lscore
+        if recalc:
+            self.adj_stats = self.rating_F(stats)
+        return self
+
+    def transform(self, X):
+        ratings = []
+        for row in X.itertuples(index=False):
+            team_ids = self.teams[row.Season]
+            wrating = self.adj_stats[row.Season][team_ids[row.Wteam]]
+            lrating = self.adj_stats[row.Season][team_ids[row.Lteam]]
+            if row.Wteam < row.Lteam:
+                ratings.append(numpy.hstack((wrating, lrating)))
+            else:
+                ratings.append(numpy.hstack((lrating, wrating)))
+        return numpy.array(ratings)
+
 class SkewnessTransformer(BaseEstimator, TransformerMixin):
 
-    def __init__(self, max_skew=2, technique='log'):
+    # lmbda 0 is log
+    # lmbda .5 is square root
+    # lmbda 1 is no transform
+    # lmbda None is statistically tuned
+    def __init__(self, max_skew=2.5, lmbda=None):
         self.max_skew = max_skew
-        self.technique = technique
+        self.lmbda = lmbda
 
     def fit(self, _X, _y=None):
         return self
@@ -342,13 +391,8 @@ class SkewnessTransformer(BaseEstimator, TransformerMixin):
         skewed_feats = X.apply(skew)
         very_skewed_feats = skewed_feats[numpy.abs(skewed_feats) > self.max_skew]
         transformed = X.copy()
-        if self.technique == 'sqrt':
-            transformed[very_skewed_feats.index] = numpy.sqrt(X[very_skewed_feats.index])
-        elif self.technique == 'log':
-            transformed[very_skewed_feats.index] = numpy.log1p(X[very_skewed_feats.index])
-        elif self.technique == 'boxcox':
-            for idx in very_skewed_feats.index:
-                transformed[idx] = boxcox(X[idx]+1)[0]
+        for idx in very_skewed_feats.index:
+            transformed[idx] = boxcox(X[idx]+1, lmbda=self.lmbda)[0]
         return transformed
 
 class OvertimeTransformer(BaseEstimator, TransformerMixin):

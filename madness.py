@@ -28,7 +28,9 @@ from ml.simulations import simulate_tourney
 from ml.wrangling import custom_train_test_split, filter_outlier_games, oversample_tourney_games
 
 
-numpy.random.seed(42) # helps get repeatable results
+# helps get repeatable results
+random_state = 17
+numpy.random.seed(random_state) 
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2016.csv'
 SEASON_DATA_FILE = 'data/regular_season_detailed_results_2016.csv'
@@ -49,6 +51,8 @@ def clean_raw_data(syear, sday, eyear):
     season = (data.pipe(lambda df: df[df.Season >= syear])
               .pipe(lambda df: df[df.Season <= eyear])
               .pipe(lambda df: df[df.Daynum >= sday]))
+    assert numpy.all(preseason >= 0)
+    assert numpy.all(season >= 0)
     return preseason, season
 
 def write_predictions(matchups, predictions, suffix=''):
@@ -125,18 +129,18 @@ SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
 TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
 
 outlier_std_devs = 6
-tourney_multiplyer = 5
+tourney_multiplyer = 10
 
 # initial pre-processing
 preseason_games, games = clean_raw_data(start_year, start_day, predict_year)
-games = filter_outlier_games(games, outlier_std_devs)
+#games = filter_outlier_games(games, outlier_std_devs)
 
 _, X_test, _, y_test = custom_train_test_split(games, predict_year)
 games = oversample_tourney_games(games, tourney_multiplyer)
 
 # training
 X_train, _, y_train, _ = custom_train_test_split(games, predict_year)
-model = train_model(preseason_games, X_train, X_test, y_train, y_test)
+model = train_model(preseason_games, X_train, X_test, y_train, y_test, random_state)
 
 if predict_year >= 2015:
 

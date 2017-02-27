@@ -18,17 +18,17 @@ from sklearn.cluster import FeatureAgglomeration
 from sklearn.linear_model import RandomizedLogisticRegression
 from sklearn.metrics import classification_report, log_loss
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
-#from sklearn.model_selection import RandomizedSearchCV
+#from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSlit
 from sklearn.neural_network.multilayer_perceptron import MLPClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import StandardScaler
 
-from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, OvertimeTransformer,
-                             PythagoreanExpectationTransformer, RatingTransformer, SkewnessTransformer, StatTransformer)
+from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, OvertimeTransformer, PythagoreanExpectationTransformer,
+                             RatingTransformer, SimpleRatingTransformer, SkewnessTransformer, StatTransformer)
 #from ml.transformers import DebugFeatureProperties
 from ml.visualizations import plot_auc, plot_confusion_matrix
 from ml.wrangling import describe_stats, derive_stats
-from ratings import off_def
+from ratings import off_def, markov
 
 
 def print_models(func):
@@ -45,9 +45,8 @@ def print_models(func):
     return printed_func
 
 @print_models
-def train_model(preseason_games, X_train, X_test, y_train, y_test):
+def train_model(preseason_games, X_train, X_test, y_train, y_test, random_state):
 
-    random_state = 42 # helps get repeatable results
     n_jobs = -1
 
     # pipeline guidelines - http://blog.kaggle.com/2016/07/21/approaching-almost-any-machine-learning-problem-abhishek-thakur/
@@ -58,8 +57,9 @@ def train_model(preseason_games, X_train, X_test, y_train, y_test):
         ('feature_engineering', FeatureUnion([
             ('luck', PythagoreanExpectationTransformer()),
             ('sos', ModifiedRPITransformer()),
-            ('offdef', RatingTransformer(off_def.adjust_stats, preseason_games)),
             ('consistency', StatTransformer(describe_stats)),
+            ('offdef', RatingTransformer(off_def.adjust_stats, preseason_games)),
+            ('markov', SimpleRatingTransformer(markov.markov_stats, preseason_games)),
             ('unknown', Pipeline([
                 ('pairwise_combos', StatTransformer(derive_stats)),
                 ('dimension_reduction', FeatureAgglomeration())
@@ -77,22 +77,23 @@ def train_model(preseason_games, X_train, X_test, y_train, y_test):
     # some grid search, some random search, some manual search arrived at these hyper-parameters
     grid = {
         'preprocess_hca__factor': [.96],
-        'feature_engineering__luck__exponent': [10.25], # also tried 13.91 and 16.5
+        'feature_engineering__luck__exponent': [13.91], # also tried 10.25 and 16.5
         'feature_engineering__sos__weights': [(.15, .15, .7)], # also tried (.25, .25, .5) and (.25, .5, .25)
         'feature_engineering__unknown__dimension_reduction__n_clusters': [50],
         'feature_engineering__unknown__dimension_reduction__affinity': ['cosine'],
         'feature_engineering__unknown__dimension_reduction__linkage': ['average'],
         'preprocess_skew__max_skew': [2.5],
-        'preprocess_skew__technique': ['log'], # box cox was almost as good
         'mlp_classifier__activation': ['logistic'],
-        'mlp_classifier__hidden_layer_sizes': [(8)] # n+1 / 2 or 2n/3 + 1 or sqrt(n+1) or samples / 10 * n+1
+        'mlp_classifier__alpha': [.0001],
+        'mlp_classifier__hidden_layer_sizes': [(7)] # n+1 / 2 or 2n/3 + 1 or sqrt(n+1) or samples / 10 * n+1
     }
 
     # 5 or 10 splits is good for balancing bias/variance
     cv = StratifiedKFold(n_splits=5, random_state=random_state)
+    #cv = TimeSeriesSplit(n_splits=5)
 
     #model = RandomizedSearchCV(estimator=pipe, param_distributions=grid, scoring='neg_log_loss', cv=cv,
-    #                           n_jobs=n_jobs, random_state=random_state, n_iter=5)
+    #                           n_jobs=n_jobs, random_state=random_state, n_iter=25)
     model = GridSearchCV(estimator=pipe, param_grid=grid, scoring='neg_log_loss', cv=cv, n_jobs=n_jobs)
 
     model.fit(X_train, y_train)
