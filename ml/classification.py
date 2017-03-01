@@ -16,9 +16,8 @@
 from sklearn.cluster import FeatureAgglomeration
 #from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import RandomizedLogisticRegression
-from sklearn.metrics import classification_report, log_loss
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
-#from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSlit
+from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
+#from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.neural_network.multilayer_perceptron import MLPClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import StandardScaler
@@ -26,7 +25,6 @@ from sklearn.preprocessing import StandardScaler
 from ml.transformers import (HomeCourtTransformer, ModifiedRPITransformer, OvertimeTransformer, PythagoreanExpectationTransformer,
                              RatingTransformer, SimpleRatingTransformer, SkewnessTransformer, StatTransformer)
 #from ml.transformers import DebugFeatureProperties
-from ml.visualizations import plot_auc, plot_confusion_matrix
 from ml.wrangling import describe_stats, derive_stats
 from ratings import off_def, markov
 
@@ -45,7 +43,7 @@ def print_models(func):
     return printed_func
 
 @print_models
-def train_model(preseason_games, X_train, X_test, y_train, y_test, random_state):
+def train_model(X_train, y_train, random_state):
 
     n_jobs = -1
 
@@ -58,8 +56,8 @@ def train_model(preseason_games, X_train, X_test, y_train, y_test, random_state)
             ('luck', PythagoreanExpectationTransformer()),
             ('sos', ModifiedRPITransformer()),
             ('consistency', StatTransformer(describe_stats)),
-            ('offdef', RatingTransformer(off_def.adjust_stats, preseason_games)),
-            ('markov', SimpleRatingTransformer(markov.markov_stats, preseason_games)),
+            ('offdef', RatingTransformer(off_def.adjust_stats)),
+            ('markov', SimpleRatingTransformer(markov.markov_stats)),
             ('unknown', Pipeline([
                 ('pairwise_combos', StatTransformer(derive_stats)),
                 ('dimension_reduction', FeatureAgglomeration())
@@ -89,21 +87,12 @@ def train_model(preseason_games, X_train, X_test, y_train, y_test, random_state)
     }
 
     # 5 or 10 splits is good for balancing bias/variance
-    cv = StratifiedKFold(n_splits=5, random_state=random_state)
-    #cv = TimeSeriesSplit(n_splits=5)
+    #cv = StratifiedKFold(n_splits=5, random_state=random_state)
+    cv = TimeSeriesSplit(n_splits=5)
 
     #model = RandomizedSearchCV(estimator=pipe, param_distributions=grid, scoring='neg_log_loss', cv=cv,
     #                           n_jobs=n_jobs, random_state=random_state, n_iter=25)
     model = GridSearchCV(estimator=pipe, param_grid=grid, scoring='neg_log_loss', cv=cv, n_jobs=n_jobs)
 
     model.fit(X_train, y_train)
-
-    if len(X_test) > 0:
-        y_predict_probas = model.predict_proba(X_test)
-        print(log_loss(y_test, y_predict_probas))
-        plot_auc(y_test, y_predict_probas[:, 1])
-        y_predict = model.predict(X_test)
-        print(classification_report(y_test, y_predict))
-        plot_confusion_matrix(y_test, y_predict)
-
     return model

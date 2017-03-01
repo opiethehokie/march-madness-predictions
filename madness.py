@@ -23,14 +23,18 @@ import pandas
 import yaml
 import yamlordereddictloader
 
+from sklearn.metrics import classification_report, log_loss
+
 from ml.classification import train_model
 from ml.simulations import simulate_tourney
-from ml.wrangling import custom_train_test_split, filter_outlier_games, oversample_tourney_games
+from ml.wrangling import custom_train_test_split, oversample_tourney_games
+#from ml.wrangling import filter_outlier_games
+from ml.visualizations import plot_auc, plot_confusion_matrix
 
 
 # helps get repeatable results
 random_state = 17
-numpy.random.seed(random_state) 
+numpy.random.seed(random_state)
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2016.csv'
 SEASON_DATA_FILE = 'data/regular_season_detailed_results_2016.csv'
@@ -123,7 +127,7 @@ def championship_pairings():
 predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2015
 
 start_year = predict_year - 4
-start_day = 30
+start_day = 15
 
 SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
 TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
@@ -132,7 +136,8 @@ outlier_std_devs = 6
 tourney_multiplyer = 10
 
 # initial pre-processing
-preseason_games, games = clean_raw_data(start_year, start_day, predict_year)
+_, games = clean_raw_data(start_year, start_day, predict_year)
+
 #games = filter_outlier_games(games, outlier_std_devs)
 
 _, X_test, _, y_test = custom_train_test_split(games, predict_year)
@@ -140,7 +145,14 @@ games = oversample_tourney_games(games, tourney_multiplyer)
 
 # training
 X_train, _, y_train, _ = custom_train_test_split(games, predict_year)
-model = train_model(preseason_games, X_train, X_test, y_train, y_test, random_state)
+model = train_model(X_train, y_train, random_state)
+
+y_predict_probas = model.predict_proba(X_test)
+print(log_loss(y_test, y_predict_probas))
+plot_auc(y_test, y_predict_probas[:, 1])
+y_predict = model.predict(X_test)
+print(classification_report(y_test, y_predict))
+plot_confusion_matrix(y_test, y_predict)
 
 if predict_year >= 2015:
 
