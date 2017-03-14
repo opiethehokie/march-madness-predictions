@@ -44,7 +44,7 @@ def test_model():
 
     assert model.best_score_ >= -0.63
     assert log_loss(y_test, model.predict_proba(X_test)) <= 0.72
-    
+
     model.predict(X_test) # for some reason calling this first makes the below assertion work
 
     file = os.path.join(mkdtemp(), 'test.pkl')

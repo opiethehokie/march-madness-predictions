@@ -37,11 +37,11 @@ random_state = 17
 numpy.random.seed(random_state)
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2016.csv'
-SEASON_DATA_FILE = 'data/regular_season_detailed_results_2016.csv'
+SEASON_DATA_FILE = 'data/regular_season_detailed_results_2017.csv'
 SUBMISSION_FILE = 'results/submission.csv'
 TEAMS_FILE = 'data/teams.csv'
-SEEDS_FILE = 'data/seeds_2016.csv'
-SLOTS_FILE = 'data/slots_2016.csv'
+SEEDS_FILE = 'data/seeds_2017.csv'
+SLOTS_FILE = 'data/slots_2017.csv'
 
 
 def clean_raw_data(syear, sday, eyear):
@@ -147,12 +147,13 @@ games = oversample_tourney_games(games, tourney_multiplyer)
 X_train, _, y_train, _ = custom_train_test_split(games, predict_year)
 model = train_model(X_train, y_train, random_state)
 
-y_predict_probas = model.predict_proba(X_test)
-print(log_loss(y_test, y_predict_probas))
-plot_auc(y_test, y_predict_probas[:, 1])
-y_predict = model.predict(X_test)
-print(classification_report(y_test, y_predict))
-plot_confusion_matrix(y_test, y_predict)
+if len(X_test) > 0:
+    y_predict_probas = model.predict_proba(X_test)
+    print(log_loss(y_test, y_predict_probas))
+    plot_auc(y_test, y_predict_probas[:, 1])
+    y_predict = model.predict(X_test)
+    print(classification_report(y_test, y_predict))
+    plot_confusion_matrix(y_test, y_predict)
 
 if predict_year >= 2015:
 
