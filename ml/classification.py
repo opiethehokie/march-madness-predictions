@@ -16,8 +16,8 @@
 from sklearn.cluster import FeatureAgglomeration
 #from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import RandomizedLogisticRegression
-from sklearn.model_selection import GridSearchCV, TimeSeriesSplit
-#from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+#from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
 from sklearn.neural_network.multilayer_perceptron import MLPClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import StandardScaler
@@ -80,15 +80,15 @@ def train_model(X_train, y_train, random_state):
         'feature_engineering__unknown__dimension_reduction__n_clusters': [50],
         'feature_engineering__unknown__dimension_reduction__affinity': ['cosine'],
         'feature_engineering__unknown__dimension_reduction__linkage': ['average'],
-        'preprocess_skew__max_skew': [2.5],
+        'preprocess_skew__max_skew': [5],
         'mlp_classifier__activation': ['logistic'],
         'mlp_classifier__alpha': [.0001],
         'mlp_classifier__hidden_layer_sizes': [(7)] # n+1 / 2 or 2n/3 + 1 or sqrt(n+1) or samples / 10 * n+1
     }
 
     # 5 or 10 splits is good for balancing bias/variance
-    #cv = StratifiedKFold(n_splits=5, random_state=random_state)
-    cv = TimeSeriesSplit(n_splits=5)
+    cv = StratifiedKFold(n_splits=5, random_state=random_state)
+    #cv = TimeSeriesSplit(n_splits=5)
 
     #model = RandomizedSearchCV(estimator=pipe, param_distributions=grid, scoring='neg_log_loss', cv=cv,
     #                           n_jobs=n_jobs, random_state=random_state, n_iter=25)

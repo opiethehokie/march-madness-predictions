@@ -1,0 +1,69 @@
+---
+# team names should match teams.csv file
+# winner of first two regions will play in final four, winner of second two regions will play in final four
+# order of "seed: team" in each region should match actual brackets
+# play-in teams represented like: teama | teamb
+S1: Villanova
+S16: Mt St Mary's | New Orleans
+S8: Wisconsin
+S9: Virginia Tech
+S5: Virginia
+S12: UNC Wilmington
+S4: Florida
+S13: ETSU
+S6: SMU
+S11: Providence | USC
+S3: Baylor
+S14: New Mexico St
+S7: South Carolina
+S10: Marquette
+S2: Duke
+S15: Troy
+W1: Gonzaga
+W16: S Dakota St
+W8: Northwestern
+W9: Vanderbilt
+W5: Notre Dame
+W12: Princeton
+W4: West Virginia
+W13: Bucknell
+W6: Maryland
+W11: Xavier
+W3: Florida St
+W14: FL Gulf Coast
+W7: St Mary's CA
+W10: VA Commonwealth
+W2: Arizona
+W15: North Dakota
+E1: Kansas
+E16: NC Central | UC Davis
+E8: Miami FL
+E9: Michigan St
+E5: Iowa St
+E12: Nevada
+E4: Purdue
+E13: Vermont
+E6: Creighton
+E11: Rhode Island
+E3: Oregon
+E14: Iona
+E7: Michigan
+E10: Oklahoma St
+E2: Louisville
+E15: Jacksonville St
+M1: North Carolina
+M16: TX Southern
+M8: Arkansas
+M9: Seton Hall
+M5: Minnesota
+M12: MTSU
+M4: Butler
+M13: Winthrop
+M6: Cincinnati
+M11: Kansas St | Wake Forest
+M3: UCLA
+M14: Kent
+M7: Dayton
+M10: Wichita St
+M2: Kentucky
+M15: N Kentucky
