@@ -12,7 +12,7 @@ Build Docker image:
 
 `docker build -t madness .`
 
-Predict tournament games for years 2012 - 2016:
+Predict tournament games for years 2012 - 2017:
 
 `docker run --rm -it -v $PWD:/workdir madness python3 madness.py <year>`
 
