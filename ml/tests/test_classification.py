@@ -1,4 +1,4 @@
-#   Copyright 2016 Michael Peters
+#   Copyright 2016-2018 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ from ml.wrangling import custom_train_test_split
 def test_model():
     year = 2013
     sday = 60
-    data = pandas.concat([pandas.read_csv('data/regular_season_detailed_results_2016.csv'),
+    data = pandas.concat([pandas.read_csv('data/regular_season_detailed_results_2017.csv'),
                           pandas.read_csv('data/tourney_detailed_results_2016.csv')]).sort_values(by='Daynum')
     games = (data.pipe(lambda df: df[df.Season >= year])
              .pipe(lambda df: df[df.Season <= year])

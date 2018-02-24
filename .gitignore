@@ -7,3 +7,5 @@ __pycache__
 results/out.txt
 results/submission*.csv
 results/*.png
+.vscode
+htmlcov
