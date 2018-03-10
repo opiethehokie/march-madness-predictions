@@ -25,15 +25,14 @@ import yamlordereddictloader
 
 from sklearn.metrics import classification_report, log_loss
 
-from ml.classification import train_model
+from ml.predictions import train_model
 from ml.simulations import simulate_tourney
-from ml.wrangling import custom_train_test_split, oversample_tourney_games
+from ml.wrangling import custom_train_test_split, oversample_tourney_games, modified_rpi
 #from ml.wrangling import filter_outlier_games
-from ml.visualizations import plot_auc, plot_confusion_matrix
 
 
 # helps get repeatable results
-random_state = 17
+random_state = 42
 numpy.random.seed(random_state)
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2016.csv'
@@ -126,8 +125,8 @@ if __name__ == '__main__':
 
     predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2015
 
-    start_year = predict_year - 4
-    start_day = 15
+    start_year = predict_year - 2
+    start_day = 30
 
     SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
     TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
@@ -135,25 +134,26 @@ if __name__ == '__main__':
     outlier_std_devs = 6
     tourney_multiplyer = 10
 
-    # initial pre-processing
     _, games = clean_raw_data(start_year, start_day, predict_year)
+
+    #TODO
+    rpis = modified_rpi(games, weights=(.15, .15, .7))
+    games = pandas.concat([games.reset_index(drop=True), pandas.DataFrame(rpis, columns=['rpi1', 'rpi2'])], axis=1)
 
     #games = filter_outlier_games(games, outlier_std_devs)
 
     _, X_test, _, y_test = custom_train_test_split(games, predict_year)
-    games = oversample_tourney_games(games, tourney_multiplyer)
+    #games = oversample_tourney_games(games, tourney_multiplyer)
 
-    # training
     X_train, _, y_train, _ = custom_train_test_split(games, predict_year)
+
     model = train_model(X_train, y_train, random_state)
 
-    if len(X_test) > 0:
-        y_predict_probas = model.predict_proba(X_test)
-        print(log_loss(y_test, y_predict_probas))
-        plot_auc(y_test, y_predict_probas[:, 1])
+    if X_test.size > 0:
         y_predict = model.predict(X_test)
         print(classification_report(y_test, y_predict))
-        plot_confusion_matrix(y_test, y_predict)
+        y_predict_probas = model.predict_proba(X_test)
+        print(log_loss(y_test, y_predict_probas))
 
     if predict_year >= 2015:
 

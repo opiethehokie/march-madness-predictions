@@ -18,10 +18,6 @@ Probabilities for every possible tournament game are written to CSV files in the
 
 ## Development
 
-Run basic unit tests:
-
-`py.test --ignore ml/tests/test_classification.py`
-
 Run all tests:
 
 `py.test`
@@ -33,12 +29,3 @@ Run pylint static analysis:
 Generate code coverage report:
 
 `py.test --cov-report html --cov .`
-
-Profile section of code:
-
-```python
-from ml.wrangling import profile
-
-@profile
-def slow_func() ...
-```
