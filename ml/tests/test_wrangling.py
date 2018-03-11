@@ -60,7 +60,7 @@ def test_overtime_adjustments(box_scores):
                                            11, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88],
                                           [2010, 1, 2, 'N', 11, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
                                            4, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80]], dtype=object),
-                             wrangling.adjust_overtime_stats(box_scores).values)
+                             wrangling.adjust_overtime_games(box_scores).values)
 
 #pylint: disable=redefined-outer-name
 def test_home_court_advantage(box_scores):

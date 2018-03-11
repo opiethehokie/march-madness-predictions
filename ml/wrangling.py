@@ -26,15 +26,15 @@ TOURNEY_START_DAY = 136
 
 # pre-processing
 
-def oversample_tourney_games(data, factor=5):
-    tourney_games = data[data.Daynum > TOURNEY_START_DAY]
+def oversample_tourney_games(data, before_year, factor=5):
+    tourney_games = data[(data.Daynum > TOURNEY_START_DAY) & (data.Season < before_year)]
     return data.append([tourney_games]*factor, ignore_index=True)
 
 def filter_outlier_games(data, m=3):
     numeric_data = data.select_dtypes(include=['int64'])
     return data[(numpy.abs(scipy.stats.zscore(numeric_data)) < m).all(axis=1)]
 
-def adjust_overtime_stats(data):
+def adjust_overtime_games(data):
     data = data.copy()
     for row in data.itertuples(index=True):
         if row.Numot > 0:
@@ -134,7 +134,7 @@ def _opponents_opponents_win_percent(season_results, opponents):
         win_percents.append(win_percent)
     return sum(win_percents) / len(opponents) if opponents else 0
 
-def modified_rpi(X, weights=(.15, .15, .7)):
+def modified_rpi(X, X_pred, weights=(.15, .15, .7)):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     rpis = []
     for row in X.itertuples(index=False):
@@ -148,7 +148,16 @@ def modified_rpi(X, weights=(.15, .15, .7)):
             rpis.append([wrpi, lrpi])
         else:
             rpis.append([lrpi, wrpi])
-    return numpy.array(rpis)
+    rpis_pred = []
+    if X_pred.size > 0:
+        for row in X_pred.itertuples(index=False):
+            wrpi = _rpi(stats[row.Season], row.Wteam, weights)
+            lrpi = _rpi(stats[row.Season], row.Lteam, weights)
+            if row.Wteam < row.Lteam:
+                rpis_pred.append([wrpi, lrpi])
+            else:
+                rpis_pred.append([lrpi, wrpi])
+    return numpy.array(rpis), numpy.array(rpis_pred)
 
 def _pythagorean_expectation(results, exponent):
     points = numpy.sum(results['points'])

@@ -37,7 +37,7 @@ def test_model():
              .pipe(lambda df: df[df.Daynum >= sday]))
     assert games.shape == (3246, 34)
 
-    rpis = modified_rpi(games)
+    rpis, _ = modified_rpi(games, None)
     assert rpis.shape == (3246, 2)
 
     games = pandas.concat([games.reset_index(drop=True), pandas.DataFrame(rpis, columns=['rpi1', 'rpi2'])], axis=1)
