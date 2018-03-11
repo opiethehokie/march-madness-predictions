@@ -21,6 +21,9 @@ import numpy
 import pandas
 import scipy.stats
 
+from ratings.off_def import adjust_stats
+from ratings.markov import markov_stats
+
 
 TOURNEY_START_DAY = 136
 
@@ -165,7 +168,7 @@ def _pythagorean_expectation(results, exponent):
     denomenator = points**exponent + points_against**exponent
     return numerator / denomenator if denomenator != 0 else 0
 
-def pythagorean_expectation(X, exponent=10.25):
+def pythagorean_expectation(X, X_pred, exponent=10.25):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     pythags = []
     for row in X.itertuples(index=False):
@@ -179,7 +182,15 @@ def pythagorean_expectation(X, exponent=10.25):
             pythags.append([wpythag, lpythag])
         else:
             pythags.append([lpythag, wpythag])
-    return numpy.array(pythags)
+    pythags_pred = []
+    for row in X_pred.itertuples(index=False):
+        wpythag = _pythagorean_expectation(stats[row.Season][row.Wteam], exponent)
+        lpythag = _pythagorean_expectation(stats[row.Season][row.Lteam], exponent)
+        if row.Wteam < row.Lteam:
+            pythags_pred.append([wpythag, lpythag])
+        else:
+            pythags_pred.append([lpythag, wpythag])
+    return numpy.array(pythags), numpy.array(pythags_pred)
 
 #TODO
 def home_court_advantage(X):
@@ -191,15 +202,15 @@ def _all_teams(data):
     for season in seasons:
         season_games = data.query('Season == %s' % season)
         sorted_teams = sorted((season_games['Wteam'].append(season_games['Lteam'])).unique())
-        teams[season] = {x:i for i, x in enumerate(sorted_teams)}
+        teams[season] = {X:i for i, X in enumerate(sorted_teams)}
     return teams
 
-def advanced_statistic_ratings(X, rating_F, preseason_games=None):
+def advanced_statistic_ratings(X, X_pred, rating_F, preseason_games=None):
     if preseason_games is not None:
         X = pandas.concat([preseason_games, X], ignore_index=True)
     teams = _all_teams(X)
     seasons = numpy.unique(X['Season'])
-    stat_categories = {x:i for i, x in enumerate(['eff_field_goal_percent', 'true_shooting', 'rebound_rate', 'free_throw_rate',
+    stat_categories = {X:i for i, X in enumerate(['eff_field_goal_percent', 'true_shooting', 'rebound_rate', 'free_throw_rate',
                                                   'turnover_rate', 'assist_rate', 'block_rate', 'steal_rate', 'score_rate', 'foul_rate'])}
     stats = {season: numpy.zeros((len(teams[season]), len(teams[season]), len(stat_categories))) for season in seasons}
     ratings = []
@@ -236,10 +247,20 @@ def advanced_statistic_ratings(X, rating_F, preseason_games=None):
             ratings.append(numpy.hstack((wrating, lrating)))
         else:
             ratings.append(numpy.hstack((lrating, wrating)))
-    return numpy.array(ratings)
+    ratings_pred = []
+    for row in X.itertuples(index=False):
+        adj_stats = rating_F(stats)
+        team_ids = teams[row.Season]
+        wrating = adj_stats[row.Season][team_ids[row.Wteam]]
+        lrating = adj_stats[row.Season][team_ids[row.Lteam]]
+        if row.Wteam < row.Lteam:
+            ratings_pred.append(numpy.hstack((wrating, lrating)))
+        else:
+            ratings_pred.append(numpy.hstack((lrating, wrating)))
+    return numpy.array(ratings), numpy.array(ratings_pred)
 
 # http://netprophetblog.blogspot.com/2012/02/continued-slow-pursuit-of-statistical.html
-def statistics(X, stat_F):
+def statistics(X, X_pred, stat_F):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     compiled_stats = []
     for row in X.itertuples(index=False):
@@ -309,4 +330,59 @@ def statistics(X, stat_F):
             compiled_stats.append(numpy.hstack((wstats, lstats)))
         else:
             compiled_stats.append(numpy.hstack((lstats, wstats)))
-    return numpy.array(compiled_stats)
+    compiled_stats_pred = []
+    for row in X.itertuples(index=False):
+        wstats = stat_F(stats[row.Season][row.Wteam])
+        lstats = stat_F(stats[row.Season][row.Lteam])
+        if row.Wteam < row.Lteam:
+            compiled_stats_pred.append(numpy.hstack((wstats, lstats)))
+        else:
+            compiled_stats_pred.append(numpy.hstack((lstats, wstats)))
+    return numpy.array(compiled_stats), numpy.array(compiled_stats_pred)
+
+def assemble_features(pre_X, X, X_pred):
+    # strength of schedule
+    rpi1, rpi1_predict = modified_rpi(X, X_pred, weights=(.15, .15, .7))
+    rpi2, rpi2_predict = modified_rpi(X, X_pred, weights=(.25, .25, .5))
+    rpi3, rpi3_predict = modified_rpi(X, X_pred, weights=(.25, .5, .25))
+    # expected wins
+    pythag1, pythag1_predict = pythagorean_expectation(X, X_pred, exponent=10.25)
+    pythag2, pythag2_predict = pythagorean_expectation(X, X_pred, exponent=13.91)
+    pythag3, pythag3_predict = pythagorean_expectation(X, X_pred, exponent=16.5)
+    # ratings
+    markov, markov_predict = advanced_statistic_ratings(X, X_pred, markov_stats, pre_X)
+    offdef, offdef_predict = advanced_statistic_ratings(X, X_pred, adjust_stats, pre_X)
+    # stats
+    descript_stats, descript_stats_predict = statistics(X, X_pred, describe_stats)
+    derived_stats, derived_stats_predict = statistics(X, X_pred, derive_stats)
+
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi1, columns=['rpi_a', 'rpi_b'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi2, columns=['rpi_c', 'rpi_d'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi3, columns=['rpi_e', 'rpi_f'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag1, columns=['pythag_a', 'pythag_b'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag2, columns=['pythag_c', 'pythag_d'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag3, columns=['pythag_e', 'pythag_f'])], axis=1)
+    markov_cols = ['markov_a', 'markov_b', 'markov_c', 'markov_d', 'markov_e', 'markov_f', 'markov_g', 'markov_h', 'markov_i', 'markov_j']
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(markov, columns=markov_cols)], axis=1)
+    offdef_cols = ['offdef_a', 'offdef_b', 'offdef_c', 'offdef_d', 'offdef_e', 'offdef_f', 'offdef_g', 'offdef_h', 'offdef_i', 'offdef_j']
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(offdef, columns=offdef_cols)], axis=1)
+    descript_stat_cols = ['stat' + str(i) for i in range(280)] # 56 x 5
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(descript_stats, columns=descript_stat_cols)], axis=1)
+    derive_stat_cols = ['stat' + str(i) for i in range(3080)] # 56 x 55
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(derived_stats, columns=derive_stat_cols)], axis=1)
+
+    X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(rpi1_predict, columns=['rpi_a', 'rpi_b'])], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(rpi2_predict, columns=['rpi_c', 'rpi_d'])], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(rpi3_predict, columns=['rpi_e', 'rpi_f'])], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True),
+                            pandas.DataFrame(pythag1_predict, columns=['pythag_a', 'pythag_b'])], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True),
+                            pandas.DataFrame(pythag2_predict, columns=['pythag_c', 'pythag_d'])], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True),
+                            pandas.DataFrame(pythag3_predict, columns=['pythag_e', 'pythag_f'])], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(markov_predict, columns=markov_cols)], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(offdef_predict, columns=offdef_cols)], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(descript_stats_predict, columns=descript_stat_cols)], axis=1)
+    X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(derived_stats_predict, columns=derive_stat_cols)], axis=1)
+
+    return X, X_pred.values.astype('float64')

@@ -13,6 +13,7 @@
 #   limitations under the License.
 
 
+import os
 import sys
 
 from collections import defaultdict
@@ -28,7 +29,7 @@ from sklearn.metrics import classification_report, log_loss
 from ml.predictions import train_model
 from ml.simulations import simulate_tourney
 from ml.wrangling import (custom_train_test_split, oversample_tourney_games, filter_outlier_games,
-                          adjust_overtime_games, modified_rpi)
+                          adjust_overtime_games, assemble_features)
 
 
 # helps get repeatable results
@@ -41,6 +42,8 @@ SUBMISSION_FILE = 'results/submission.csv'
 TEAMS_FILE = 'data/teams.csv'
 SEEDS_FILE = 'data/seeds_2017.csv'
 SLOTS_FILE = 'data/slots_2017.csv'
+FEATURE_CACHE_FILE = 'data/feature_cache.csv'
+PREDICT_CACHE_FILE = 'data/predict_cache.csv'
 
 
 def clean_raw_data(syear, sday, eyear):
@@ -128,14 +131,14 @@ def championship_pairings():
     return slots
 
 
-def add_features(games, postseason_games):
-    rpis, rpis_predict = modified_rpi(games, postseason_games, weights=(.15, .15, .7))
-    games = pandas.concat([games.reset_index(drop=True), 
-                           pandas.DataFrame(rpis, columns=['rpi1', 'rpi2'])], axis=1)
-    postseason_games = pandas.concat([postseason_games.reset_index(drop=True), 
-                                      pandas.DataFrame(rpis_predict, columns=['rpi1', 'rpi2'])], axis=1)
-    postseason_games = postseason_games.values.astype('float64')
-    return games, postseason_games
+def add_features(pre_data, data, post_data):
+    if not os.path.isfile(FEATURE_CACHE_FILE) or not os.path.isfile(PREDICT_CACHE_FILE):
+        features, features_predict = assemble_features(pre_data, data, post_data)
+        features.to_csv(FEATURE_CACHE_FILE)
+        features_predict.to_csv(PREDICT_CACHE_FILE)
+        assert features.shape[1] == 34 + 3392
+        assert features_predict.shape[1] == 4 + 3392
+    return pandas.read_csv(FEATURE_CACHE_FILE), pandas.read_csv(PREDICT_CACHE_FILE).values.astype('float64')
 
 
 if __name__ == '__main__':
@@ -160,7 +163,7 @@ if __name__ == '__main__':
     #games = filter_outlier_games(games, m=outlier_std_devs)
     #games = oversample_tourney_games(games, predict_year, factor=tourney_multiplyer)
 
-    games, X_predict = add_features(games, postseason_games)
+    games, X_predict = add_features(preseason_games, games, postseason_games)
     X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
     model = train_model(X_train, y_train, random_state)
 

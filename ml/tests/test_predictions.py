@@ -20,9 +20,13 @@ import numpy
 import pandas
 
 from sklearn.externals import joblib
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import log_loss
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
-from ml.predictions import train_model, custom_cv
+from ml.predictions import train_model, custom_cv, custom_log_loss, mov_to_win
+from ml.transformers import ColumnSelector
 from ml.wrangling import custom_train_test_split, modified_rpi
 
 
@@ -48,8 +52,12 @@ def test_model():
     assert X_test.shape == (63, 6)
     assert y_train.shape == (9793,)
     assert y_test.shape == (63,)
+    assert isinstance(X_train, numpy.ndarray)
+    assert isinstance(X_test, numpy.ndarray)
+    assert isinstance(y_train, numpy.ndarray)
+    assert isinstance(y_test, numpy.ndarray)
 
-    model = train_model(X_train, y_train, 0)
+    model = train_model(X_train, y_train, regressors=[make_pipeline(ColumnSelector(cols=[4, 5]), StandardScaler(), LinearRegression())])
     assert log_loss(y_test, model.predict_proba(X_test)) <= 0.65
 
     file = os.path.join(mkdtemp(), 'test.pkl')
@@ -72,3 +80,8 @@ def test_custom_cv():
     assert numpy.array_equal(numpy.array([1], dtype=numpy.int64), indices[0][1])
     assert numpy.array_equal(numpy.array([0, 1, 2, 4], dtype=numpy.int64), indices[1][0])
     assert numpy.array_equal(numpy.array([3], dtype=numpy.int64), indices[1][1])
+
+def test_custom_log_loss():
+    movs = numpy.array([4, 5, -3, 11, -22])
+    predictions = numpy.array([.6, .6, .48, .8, .2])
+    assert custom_log_loss(movs, predictions, mov_to_win) == 0.42437296351341292

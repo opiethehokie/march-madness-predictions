@@ -15,65 +15,101 @@
 
 import numpy
 
-# from sklearn.cluster import FeatureAgglomeration
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
-# from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
-from sklearn.pipeline import Pipeline, FeatureUnion, make_pipeline
+from sklearn.feature_selection import SelectKBest, f_regression
+from sklearn.metrics import log_loss, make_scorer
+from sklearn.model_selection import GridSearchCV
+from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
+from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge, Lasso
 
 from ml.regression_stacking_cv_classifier import RegressionStackingCVClassifier
-from ml.transformers import ColumnSelector, DebugFeatureProperties
-from ml.wrangling import describe_stats, derive_stats, TOURNEY_START_DAY
+from ml.transformers import ColumnSelector, SkewnessTransformer
+from ml.wrangling import TOURNEY_START_DAY
 from ml.util import print_models
-# from ratings import off_def, markov
 
 
-RPI1_COL = 4
-RPI2_COL = 5
+RPI_START = 4
+RPI_END = 9
 
-def rpi_linear_regression(n_jobs=-1):
-    return make_pipeline(ColumnSelector(cols=[RPI1_COL, RPI2_COL]),
+PYTHAG_START = 10
+PYTHAG_END = 15
+
+MARKOV_RATING_START = 16
+MARKOV_RATING_END = 25
+
+OFFDEF_RATING_START = 26
+OFFDEF_RATING_END = 35
+
+DESCRIPT_STAT_START = 36
+DESCRIPT_STAT_END = 315
+
+DERIVE_STAT_START = 316
+DERIVE_STAT_END = 3395
+
+#TODO http://scikit-learn.org/stable/modules/classes.html#module-sklearn.model_selection
+
+def rpi_regression():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(RPI_START, RPI_END + 1)]),
                          StandardScaler(),
-                         LinearRegression(n_jobs=n_jobs))
+                         LinearRegression())
 
-def rpi_ridge_regression():
-    return make_pipeline(ColumnSelector(cols=[RPI1_COL, RPI2_COL]),
+def pythag_regression():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(PYTHAG_START, PYTHAG_END + 1)]),
                          StandardScaler(),
-                         Ridge())
+                         LinearRegression())
 
-def make_regressor_pipeline(cols, scaler, reg):
-    #TODO memory param
-    return make_pipeline(ColumnSelector(cols=cols),
-                         scaler,
-                         reg)
+def markov_rating_regression():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(MARKOV_RATING_START, MARKOV_RATING_END + 1)]),
+                         StandardScaler(),
+                         LinearRegression())
+
+def off_def_rating_regression():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(OFFDEF_RATING_START, OFFDEF_RATING_END + 1)]),
+                         StandardScaler(),
+                         LinearRegression())
+
+def descriptive_stat_regression():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(DESCRIPT_STAT_START, DESCRIPT_STAT_END + 1)]),
+                         StandardScaler(),
+                         LinearRegression())
+
+def derived_stat_regression():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(DERIVE_STAT_START, DERIVE_STAT_END+1)]),
+                         StandardScaler(),
+                         LinearRegression())
 
 def mov_to_win(label):
     return int(label > 0)
 
 
 @print_models
-def train_model(X_train, y_train, random_state, n_jobs=-1):
+def train_model(X_train, y_train, random_state=None, n_jobs=1, regressors=None):
 
-    stacker = RegressionStackingCVClassifier(regressors=[rpi_linear_regression(n_jobs=n_jobs),
-                                                         rpi_ridge_regression()
-                                                        ],
-                                             meta_classifier=LogisticRegression(),
-                                             to_class_func=mov_to_win)
+    if not regressors:
+        regressors = [pythag_regression(), rpi_regression()]
+
+    stacker = make_pipeline(SelectKBest(score_func=f_regression),
+                            RegressionStackingCVClassifier(regressors=regressors,
+                                                           meta_classifier=LogisticRegression(),
+                                                           to_class_func=mov_to_win))
 
     # http://blog.kaggle.com/2016/07/21/approaching-almost-any-machine-learning-problem-abhishek-thakur/
-    grid = { 'pipeline-1__linearregression__fit_intercept': [True, False],
-             'pipeline-1__linearregression__normalize': [True, False],
-             'pipeline-2__ridge__alpha': [1, 10, 100],
-             'pipeline-2__ridge__fit_intercept': [True, False],
-             'pipeline-2__ridge__normalize': [True, False],
-             'meta-logisticregression__C': [.01, .1, 1],
-             'meta-logisticregression__penalty': ['l1', 'l2']
+    grid = { #'regressionstackingcvclassifier__pipeline__lasso__alpha': [1, 10, 100],
+             #'regressionstackingcvclassifier__pipeline__lasso__normalize': [True, False],
+             #'regressionstackingcvclassifier__pipeline__ridge__alpha': [1, 10, 100],
+             #'regressionstackingcvclassifier__pipeline__ridge__fit_intercept': [True, False],
+             #'regressionstackingcvclassifier__pipeline__ridge__normalize': [True, False],
+             'selectkbest__k': ['all'],
+             #'regressionstackingcvclassifier__pipeline__meta-logisticregression__C': [.01, .1, 1],
+             #'regressionstackingcvclassifier__pipeline__meta-logisticregression__penalty': ['l1', 'l2']
            }
+    #print(stacker.get_params().keys())
 
     cv = custom_cv(X_train)
 
-    model = GridSearchCV(estimator=stacker, param_grid=grid, cv=cv, n_jobs=n_jobs)
+    scoring = make_scorer(custom_log_loss, needs_proba=True, to_class_func=mov_to_win)
+
+    model = GridSearchCV(estimator=stacker, param_grid=grid, scoring=scoring, cv=cv, n_jobs=n_jobs)
     model.fit(X_train, y_train)
     return model
 
@@ -83,3 +119,7 @@ def custom_cv(X):
     day_col = X[:, 1]
     return [(numpy.where((season_col != season) | (day_col < TOURNEY_START_DAY))[0],
              numpy.where((season_col == season) & (day_col >= TOURNEY_START_DAY))[0]) for season in seasons[0: -1]]
+
+def custom_log_loss(y_true, y_pred, to_class_func):
+    y_true = numpy.fromiter((to_class_func(yi) for yi in y_true), y_true.dtype)
+    return log_loss(y_true, y_pred, labels=[0, 1])
