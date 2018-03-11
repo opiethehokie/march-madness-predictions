@@ -18,7 +18,7 @@ from mlxtend.externals.name_estimators import _name_estimators
 from sklearn.base import clone
 from sklearn.utils.validation import check_is_fitted
 from sklearn.externals import six
-from sklearn.model_selection._split import check_cv
+from sklearn.model_selection import check_cv
 import numpy as np
 
 # mostly copied from https://github.com/rasbt/mlxtend/blob/master/mlxtend/classifier/stacking_cv_classification.py
@@ -70,6 +70,7 @@ class RegressionStackingCVClassifier(StackingCVClassifier):
         skf = list(final_cv.split(X, clf_y, groups))
 
         all_model_predictions = np.array([]).reshape(len(y), 0)
+
         for model in self.regs_:
 
             if self.verbose > 0:
@@ -105,10 +106,12 @@ class RegressionStackingCVClassifier(StackingCVClassifier):
                 if not self.use_probas:
                     prediction = model.predict(X[test_index])
                     prediction = prediction.reshape(prediction.shape[0], 1)
+                    print(prediction.shape)
                 else:
                     prediction = model.predict_proba(X[test_index])
                 single_model_prediction = np.vstack([single_model_prediction.astype(prediction.dtype), prediction])
 
+            print('combining ', all_model_predictions.shape, single_model_prediction.shape)
             all_model_predictions = np.hstack([all_model_predictions.astype(single_model_prediction.dtype), single_model_prediction])
 
         if self.store_train_meta_features:

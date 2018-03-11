@@ -22,7 +22,7 @@ import pandas
 from sklearn.externals import joblib
 from sklearn.metrics import log_loss
 
-from ml.predictions import train_model
+from ml.predictions import train_model, custom_cv
 from ml.wrangling import custom_train_test_split, modified_rpi
 
 
@@ -30,23 +30,23 @@ def test_model():
     year = 2013
     sday = 60
     data = pandas.concat([pandas.read_csv('data/regular_season_detailed_results_2017.csv'),
-                          pandas.read_csv('data/tourney_detailed_results_2016.csv')]).sort_values(by='Daynum')
+                          pandas.read_csv('data/tourney_detailed_results_2017.csv')]).sort_values(by='Daynum')
 
-    games = (data.pipe(lambda df: df[df.Season >= year])
+    games = (data.pipe(lambda df: df[df.Season >= year - 2])
              .pipe(lambda df: df[df.Season <= year])
              .pipe(lambda df: df[df.Daynum >= sday]))
-    assert games.shape == (3246, 34)
+    assert games.shape == (9856, 34)
 
-    rpis, _ = modified_rpi(games, None)
-    assert rpis.shape == (3246, 2)
+    rpis, _ = modified_rpi(games, pandas.DataFrame([]))
+    assert rpis.shape == (9856, 2)
 
     games = pandas.concat([games.reset_index(drop=True), pandas.DataFrame(rpis, columns=['rpi1', 'rpi2'])], axis=1)
-    assert games.shape == (3246, 36)
+    assert games.shape == (9856, 36)
 
     X_train, X_test, y_train, y_test = custom_train_test_split(games, year)
-    assert X_train.shape == (3183, 6)
+    assert X_train.shape == (9793, 6)
     assert X_test.shape == (63, 6)
-    assert y_train.shape == (3183,)
+    assert y_train.shape == (9793,)
     assert y_test.shape == (63,)
 
     model = train_model(X_train, y_train, 0)
@@ -58,3 +58,17 @@ def test_model():
     fake_boxscores = [[year, 137, 1361, 1328, .55, .52]]
     X_predict = pandas.DataFrame(fake_boxscores)
     assert numpy.array_equal(persisted_model.predict_proba(X_predict), model.predict_proba(X_predict))
+
+def test_custom_cv():
+    X = numpy.array([[2013, 50],
+                     [2013, 140],
+                     [2014, 55],
+                     [2014, 138],
+                     [2015, 22]
+                    ])
+    indices = custom_cv(X)
+    assert len(indices) == 2
+    assert numpy.array_equal(numpy.array([0, 2, 3, 4], dtype=numpy.int64), indices[0][0])
+    assert numpy.array_equal(numpy.array([1], dtype=numpy.int64), indices[0][1])
+    assert numpy.array_equal(numpy.array([0, 1, 2, 4], dtype=numpy.int64), indices[1][0])
+    assert numpy.array_equal(numpy.array([3], dtype=numpy.int64), indices[1][1])

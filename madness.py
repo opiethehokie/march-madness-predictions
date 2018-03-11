@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
     # base hyperparameters
 
-    start_year = predict_year - 2
+    start_year = predict_year - 3
     start_day = 30
 
     outlier_std_devs = 6

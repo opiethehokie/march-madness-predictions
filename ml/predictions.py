@@ -13,6 +13,8 @@
 #   limitations under the License.
 
 
+import numpy
+
 # from sklearn.cluster import FeatureAgglomeration
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
 # from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
@@ -22,7 +24,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression, Ridge
 
 from ml.regression_stacking_cv_classifier import RegressionStackingCVClassifier
 from ml.transformers import ColumnSelector, DebugFeatureProperties
-# from ml.wrangling import describe_stats, derive_stats
+from ml.wrangling import describe_stats, derive_stats, TOURNEY_START_DAY
 from ml.util import print_models
 # from ratings import off_def, markov
 
@@ -53,29 +55,26 @@ def mov_to_win(label):
 
 
 #@print_models
-def train_model(X_train, y_train, random_state):
-
-    n_jobs = -1
+def train_model(X_train, y_train, random_state, n_jobs=1):
 
     stacker = RegressionStackingCVClassifier(regressors=[rpi_linear_regression(n_jobs=n_jobs),
                                                          rpi_ridge_regression()
                                                         ],
                                              meta_classifier=LogisticRegression(), #TODO n_jobs=n_jobs
-                                             to_class_func=mov_to_win)
+                                             to_class_func=mov_to_win,
+                                             cv=2)
 
-    # 5 or 10 splits is good for balancing bias/variance
-    cv = StratifiedKFold(n_splits=5, random_state=random_state)
-    # cv = TimeSeriesSplit(n_splits=5)
+    #cv = custom_cv(X_train)
 
-    scoring = 'neg_log_loss'
-
-    # model = RandomizedSearchCV(estimator=pipe, param_distributions=grid, scoring='neg_log_loss', cv=cv,
-    #                           n_jobs=n_jobs, random_state=random_state, n_iter=25)
-    #model = GridSearchCV(estimator=stacker, param_grid=grid,
-    #                     scoring=scoring, cv=cv, n_jobs=n_jobs)
-
+    #model = GridSearchCV(estimator=stacker, param_grid={}, scoring='neg_log_loss', cv=cv, n_jobs=n_jobs)
     #model.fit(X_train, y_train)
-    stacker.fit(X_train, y_train)
-
     #return model
+    stacker.fit(X_train, y_train)
     return stacker
+
+def custom_cv(X):
+    season_col = X[:, 0]
+    seasons = numpy.unique(season_col)
+    day_col = X[:, 1]
+    return [(numpy.where((season_col != season) | (day_col < TOURNEY_START_DAY))[0],
+             numpy.where((season_col == season) & (day_col >= TOURNEY_START_DAY))[0]) for season in seasons[0: -1]]

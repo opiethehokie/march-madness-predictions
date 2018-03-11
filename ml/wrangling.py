@@ -149,14 +149,13 @@ def modified_rpi(X, X_pred, weights=(.15, .15, .7)):
         else:
             rpis.append([lrpi, wrpi])
     rpis_pred = []
-    if X_pred.size > 0:
-        for row in X_pred.itertuples(index=False):
-            wrpi = _rpi(stats[row.Season], row.Wteam, weights)
-            lrpi = _rpi(stats[row.Season], row.Lteam, weights)
-            if row.Wteam < row.Lteam:
-                rpis_pred.append([wrpi, lrpi])
-            else:
-                rpis_pred.append([lrpi, wrpi])
+    for row in X_pred.itertuples(index=False):
+        wrpi = _rpi(stats[row.Season], row.Wteam, weights)
+        lrpi = _rpi(stats[row.Season], row.Lteam, weights)
+        if row.Wteam < row.Lteam:
+            rpis_pred.append([wrpi, lrpi])
+        else:
+            rpis_pred.append([lrpi, wrpi])
     return numpy.array(rpis), numpy.array(rpis_pred)
 
 def _pythagorean_expectation(results, exponent):
