@@ -51,21 +51,24 @@ def make_regressor_pipeline(cols, scaler, reg):
 def mov_to_win(label):
     return int(label > 0)
 
-#TODO http://blog.kaggle.com/2016/07/21/approaching-almost-any-machine-learning-problem-abhishek-thakur/
-
 
 @print_models
-def train_model(X_train, y_train, random_state, n_jobs=1):
+def train_model(X_train, y_train, random_state, n_jobs=-1):
 
     stacker = RegressionStackingCVClassifier(regressors=[rpi_linear_regression(n_jobs=n_jobs),
                                                          rpi_ridge_regression()
                                                         ],
-                                             meta_classifier=LogisticRegression(), #TODO n_jobs=n_jobs
+                                             meta_classifier=LogisticRegression(),
                                              to_class_func=mov_to_win)
 
-    grid = { #'kneighborsclassifier__n_neighbors': [1, 5],
-             #'randomforestclassifier__n_estimators': [10, 50],
-             #'meta-logisticregression__C': [0.1, 10.0]
+    # http://blog.kaggle.com/2016/07/21/approaching-almost-any-machine-learning-problem-abhishek-thakur/
+    grid = { 'pipeline-1__linearregression__fit_intercept': [True, False],
+             'pipeline-1__linearregression__normalize': [True, False],
+             'pipeline-2__ridge__alpha': [1, 10, 100],
+             'pipeline-2__ridge__fit_intercept': [True, False],
+             'pipeline-2__ridge__normalize': [True, False],
+             'meta-logisticregression__C': [.01, .1, 1],
+             'meta-logisticregression__penalty': ['l1', 'l2']
            }
 
     cv = custom_cv(X_train)
