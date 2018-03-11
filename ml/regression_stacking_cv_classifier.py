@@ -106,12 +106,10 @@ class RegressionStackingCVClassifier(StackingCVClassifier):
                 if not self.use_probas:
                     prediction = model.predict(X[test_index])
                     prediction = prediction.reshape(prediction.shape[0], 1)
-                    print(prediction.shape)
                 else:
                     prediction = model.predict_proba(X[test_index])
                 single_model_prediction = np.vstack([single_model_prediction.astype(prediction.dtype), prediction])
 
-            print('combining ', all_model_predictions.shape, single_model_prediction.shape)
             all_model_predictions = np.hstack([all_model_predictions.astype(single_model_prediction.dtype), single_model_prediction])
 
         if self.store_train_meta_features:

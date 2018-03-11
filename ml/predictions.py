@@ -54,23 +54,25 @@ def mov_to_win(label):
 #TODO http://blog.kaggle.com/2016/07/21/approaching-almost-any-machine-learning-problem-abhishek-thakur/
 
 
-#@print_models
+@print_models
 def train_model(X_train, y_train, random_state, n_jobs=1):
 
     stacker = RegressionStackingCVClassifier(regressors=[rpi_linear_regression(n_jobs=n_jobs),
                                                          rpi_ridge_regression()
                                                         ],
                                              meta_classifier=LogisticRegression(), #TODO n_jobs=n_jobs
-                                             to_class_func=mov_to_win,
-                                             cv=2)
+                                             to_class_func=mov_to_win)
 
-    #cv = custom_cv(X_train)
+    grid = { #'kneighborsclassifier__n_neighbors': [1, 5],
+             #'randomforestclassifier__n_estimators': [10, 50],
+             #'meta-logisticregression__C': [0.1, 10.0]
+           }
 
-    #model = GridSearchCV(estimator=stacker, param_grid={}, scoring='neg_log_loss', cv=cv, n_jobs=n_jobs)
-    #model.fit(X_train, y_train)
-    #return model
-    stacker.fit(X_train, y_train)
-    return stacker
+    cv = custom_cv(X_train)
+
+    model = GridSearchCV(estimator=stacker, param_grid=grid, cv=cv, n_jobs=n_jobs)
+    model.fit(X_train, y_train)
+    return model
 
 def custom_cv(X):
     season_col = X[:, 0]
