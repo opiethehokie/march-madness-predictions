@@ -29,10 +29,6 @@ TOURNEY_START_DAY = 136
 
 # pre-processing
 
-def oversample_tourney_games(data, before_year, factor=5):
-    tourney_games = data[(data.Daynum > TOURNEY_START_DAY) & (data.Season < before_year)]
-    return data.append([tourney_games]*factor, ignore_index=True)
-
 def filter_outlier_games(data, m=3):
     numeric_data = data.select_dtypes(include=['int64'])
     return data[(numpy.abs(scipy.stats.zscore(numeric_data)) < m).all(axis=1)]

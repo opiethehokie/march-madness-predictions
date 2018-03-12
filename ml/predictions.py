@@ -14,6 +14,7 @@
 
 
 import numpy
+import time
 
 from sklearn.decomposition import PCA
 from sklearn.ensemble import AdaBoostRegressor, GradientBoostingRegressor, RandomForestRegressor
@@ -126,14 +127,14 @@ def train_model(X_train, y_train, random_state=None, n_jobs=2, regressors=None):
              #'regressionstackingcvclassifier__pipeline__meta-logisticregression__penalty': ['l1', 'l2']
            }
 
+    print('Training model ...')
+    t1 = time.time()
     cv = custom_cv(X_train)
-
     scoring = make_scorer(custom_log_loss, needs_proba=True, to_class_func=mov_to_win)
-
-    print('starting model training ...')
-
     model = GridSearchCV(estimator=stacker, param_grid=grid, scoring=scoring, cv=cv, n_jobs=n_jobs)
     model.fit(X_train, y_train)
+    t2 = time.time()
+    print('Training took %f seconds' % (t2 - t1))
     return model
 
 def custom_cv(X):
