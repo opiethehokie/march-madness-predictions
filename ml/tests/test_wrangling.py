@@ -63,6 +63,11 @@ def test_overtime_adjustments(box_scores):
                              wrangling.adjust_overtime_games(box_scores).values)
 
 #pylint: disable=redefined-outer-name
-def test_home_court_advantage(box_scores):
-    assert numpy.array_equal(box_scores,
-                             wrangling.home_court_advantage(box_scores))
+def test_negate_home_court_advantage(box_scores):
+    assert numpy.array_equal(numpy.array([[2010, 1, 0, 'H', 4, 0, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
+                                           6, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+                                          [2010, 1, 1, 'A', 6, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
+                                           11, 0, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
+                                          [2010, 1, 2, 'N', 11, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
+                                           4, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100]], dtype=object),
+                             wrangling.negate_home_court_advantage(box_scores).values)

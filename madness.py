@@ -29,7 +29,7 @@ from sklearn.metrics import classification_report, log_loss
 from ml.predictions import train_model
 from ml.simulations import simulate_tourney
 from ml.wrangling import (custom_train_test_split, oversample_tourney_games, filter_outlier_games,
-                          adjust_overtime_games, assemble_features)
+                          adjust_overtime_games, assemble_features, negate_home_court_advantage)
 
 
 # helps get repeatable results
@@ -135,10 +135,12 @@ def add_features(pre_data, data, post_data):
     if not os.path.isfile(FEATURE_CACHE_FILE) or not os.path.isfile(PREDICT_CACHE_FILE):
         features, features_predict = assemble_features(pre_data, data, post_data)
         features.to_csv(FEATURE_CACHE_FILE)
-        features_predict.to_csv(PREDICT_CACHE_FILE)
-        assert features.shape[1] == 34 + 3392
-        assert features_predict.shape[1] == 4 + 3392
-    return pandas.read_csv(FEATURE_CACHE_FILE), pandas.read_csv(PREDICT_CACHE_FILE).values.astype('float64')
+        pandas.DataFrame(features_predict).to_csv(PREDICT_CACHE_FILE)
+        assert features.shape[1] == 34 + 1108
+        assert features_predict.shape[1] == 4 + 1108
+    features = pandas.read_csv(FEATURE_CACHE_FILE, index_col=0)
+    features_predict = pandas.read_csv(PREDICT_CACHE_FILE, index_col=0)
+    return features, features_predict.values.astype('float64')
 
 
 if __name__ == '__main__':

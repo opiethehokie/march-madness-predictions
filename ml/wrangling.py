@@ -72,6 +72,26 @@ def adjust_overtime_games(data):
             data.at[row.Index, 'Lpf'] = row.Lpf * ot_adj
     return data
 
+def negate_home_court_advantage(data):
+    data = data.copy()
+    stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+    for row in data.itertuples(index=True):
+        if row.Wloc == 'H':
+            stats[row.Season][row.Wteam]['home-points'].append(row.Wscore)
+            stats[row.Season][row.Lteam]['away-points'].append(row.Lscore)
+        else:
+            stats[row.Season][row.Wteam]['away-points'].append(row.Wscore)
+            stats[row.Season][row.Lteam]['home-points'].append(row.Lscore)
+        wteam_home = numpy.average(stats[row.Season][row.Wteam]['home-points']) if stats[row.Season][row.Wteam]['home-points'] else 0
+        wteam_away = numpy.average(stats[row.Season][row.Wteam]['away-points']) if stats[row.Season][row.Wteam]['away-points'] else 0
+        lteam_home = numpy.average(stats[row.Season][row.Lteam]['home-points']) if stats[row.Season][row.Lteam]['home-points'] else 0
+        lteam_away = numpy.average(stats[row.Season][row.Lteam]['away-points']) if stats[row.Season][row.Lteam]['away-points'] else 0
+        if row.Wloc == 'H':
+            data.at[row.Index, 'Wscore'] = row.Wscore - (wteam_home - wteam_away)
+        if row.Wloc == 'A':
+            data.at[row.Index, 'Lscore'] = row.Lscore - (lteam_home - lteam_away)
+    return data
+
 def custom_train_test_split(data, predict_year):
     train_games = data[(data.Season != predict_year) | (data.Daynum < TOURNEY_START_DAY)]
     holdout_games = data[(data.Season == predict_year) & (data.Daynum >= TOURNEY_START_DAY)]
@@ -192,10 +212,6 @@ def pythagorean_expectation(X, X_pred, exponent=10.25):
             pythags_pred.append([lpythag, wpythag])
     return numpy.array(pythags), numpy.array(pythags_pred)
 
-#TODO
-def home_court_advantage(X):
-    return X.copy()
-
 def _all_teams(data):
     seasons = data['Season'].unique()
     teams = {}
@@ -206,6 +222,7 @@ def _all_teams(data):
     return teams
 
 def advanced_statistic_ratings(X, X_pred, rating_F, preseason_games=None):
+    first_day = min(numpy.unique(X['Daynum']))
     if preseason_games is not None:
         X = pandas.concat([preseason_games, X], ignore_index=True)
     teams = _all_teams(X)
@@ -214,6 +231,8 @@ def advanced_statistic_ratings(X, X_pred, rating_F, preseason_games=None):
                                                   'turnover_rate', 'assist_rate', 'block_rate', 'steal_rate', 'score_rate', 'foul_rate'])}
     stats = {season: numpy.zeros((len(teams[season]), len(teams[season]), len(stat_categories))) for season in seasons}
     ratings = []
+    day = 0
+    adj_stats = None
     for row in X.itertuples(index=False):
         wteam_id = teams[row.Season][row.Wteam]
         lteam_id = teams[row.Season][row.Lteam]
@@ -239,17 +258,19 @@ def advanced_statistic_ratings(X, X_pred, rating_F, preseason_games=None):
         stats[row.Season][lteam_id][wteam_id][stat_categories['score_rate']] += (row.Lscore / lposs)
         stats[row.Season][wteam_id][lteam_id][stat_categories['foul_rate']] += (row.Wpf / lposs)
         stats[row.Season][lteam_id][wteam_id][stat_categories['foul_rate']] += (row.Lpf / wposs)
-        adj_stats = rating_F(stats)
-        team_ids = teams[row.Season]
-        wrating = adj_stats[row.Season][team_ids[row.Wteam]]
-        lrating = adj_stats[row.Season][team_ids[row.Lteam]]
-        if row.Wteam < row.Lteam:
-            ratings.append(numpy.hstack((wrating, lrating)))
-        else:
-            ratings.append(numpy.hstack((lrating, wrating)))
+        if row.Daynum >= first_day:
+            if row.Daynum > day:
+                adj_stats = rating_F(stats)
+                day = row.Daynum
+            team_ids = teams[row.Season]
+            wrating = adj_stats[row.Season][team_ids[row.Wteam]]
+            lrating = adj_stats[row.Season][team_ids[row.Lteam]]
+            if row.Wteam < row.Lteam:
+                ratings.append(numpy.hstack((wrating, lrating)))
+            else:
+                ratings.append(numpy.hstack((lrating, wrating)))
     ratings_pred = []
-    for row in X.itertuples(index=False):
-        adj_stats = rating_F(stats)
+    for row in X_pred.itertuples(index=False):
         team_ids = teams[row.Season]
         wrating = adj_stats[row.Season][team_ids[row.Wteam]]
         lrating = adj_stats[row.Season][team_ids[row.Lteam]]
@@ -331,7 +352,7 @@ def statistics(X, X_pred, stat_F):
         else:
             compiled_stats.append(numpy.hstack((lstats, wstats)))
     compiled_stats_pred = []
-    for row in X.itertuples(index=False):
+    for row in X_pred.itertuples(index=False):
         wstats = stat_F(stats[row.Season][row.Wteam])
         lstats = stat_F(stats[row.Season][row.Lteam])
         if row.Wteam < row.Lteam:
@@ -356,19 +377,19 @@ def assemble_features(pre_X, X, X_pred):
     descript_stats, descript_stats_predict = statistics(X, X_pred, describe_stats)
     derived_stats, derived_stats_predict = statistics(X, X_pred, derive_stats)
 
-    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi1, columns=['rpi_a', 'rpi_b'])], axis=1)
-    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi2, columns=['rpi_c', 'rpi_d'])], axis=1)
-    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi3, columns=['rpi_e', 'rpi_f'])], axis=1)
-    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag1, columns=['pythag_a', 'pythag_b'])], axis=1)
-    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag2, columns=['pythag_c', 'pythag_d'])], axis=1)
-    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag3, columns=['pythag_e', 'pythag_f'])], axis=1)
-    markov_cols = ['markov_a', 'markov_b', 'markov_c', 'markov_d', 'markov_e', 'markov_f', 'markov_g', 'markov_h', 'markov_i', 'markov_j']
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi1, columns=['rpi_1', 'rpi_2'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi2, columns=['rpi_3', 'rpi_4'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(rpi3, columns=['rpi_5', 'rpi_6'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag1, columns=['pythag_1', 'pythag_2'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag2, columns=['pythag_3', 'pythag_4'])], axis=1)
+    X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(pythag3, columns=['pythag_5', 'pythag_6'])], axis=1)
+    markov_cols = ['markov_' + str(i) for i in range(20)]
     X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(markov, columns=markov_cols)], axis=1)
-    offdef_cols = ['offdef_a', 'offdef_b', 'offdef_c', 'offdef_d', 'offdef_e', 'offdef_f', 'offdef_g', 'offdef_h', 'offdef_i', 'offdef_j']
+    offdef_cols = ['offdef_' + str(i) for i in range(40)]
     X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(offdef, columns=offdef_cols)], axis=1)
-    descript_stat_cols = ['stat' + str(i) for i in range(280)] # 56 x 5
+    descript_stat_cols = ['stat_a' + str(i) for i in range(280)] # 56 x 5
     X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(descript_stats, columns=descript_stat_cols)], axis=1)
-    derive_stat_cols = ['stat' + str(i) for i in range(3080)] # 56 x 55
+    derive_stat_cols = ['stat_b' + str(i) for i in range(756)] # 28 x 27
     X = pandas.concat([X.reset_index(drop=True), pandas.DataFrame(derived_stats, columns=derive_stat_cols)], axis=1)
 
     X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(rpi1_predict, columns=['rpi_a', 'rpi_b'])], axis=1)
