@@ -28,7 +28,7 @@ from sklearn.metrics import classification_report, log_loss, accuracy_score
 
 from ml.predictions import train_model
 from ml.simulations import simulate_tourney
-from ml.wrangling import (custom_train_test_split, filter_outlier_games, adjust_overtime_games, 
+from ml.wrangling import (custom_train_test_split, filter_outlier_games, adjust_overtime_games,
                           assemble_features, negate_home_court_advantage)
 
 

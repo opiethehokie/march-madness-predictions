@@ -33,7 +33,7 @@ from ml.wrangling import custom_train_test_split, modified_rpi
 def test_model():
     year = 2013
     sday = 60
-    data = pandas.concat([pandas.read_csv('data/regular_season_detailed_results_2017.csv'),
+    data = pandas.concat([pandas.read_csv('data/regular_season_detailed_results_2018.csv'),
                           pandas.read_csv('data/tourney_detailed_results_2017.csv')]).sort_values(by='Daynum')
 
     games = (data.pipe(lambda df: df[df.Season >= year - 2])
