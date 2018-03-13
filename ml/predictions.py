@@ -13,18 +13,19 @@
 #   limitations under the License.
 
 
-import numpy
 import time
 
+import numpy
+
+from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
-from sklearn.ensemble import AdaBoostRegressor, GradientBoostingRegressor, RandomForestRegressor
-from sklearn.feature_selection import SelectKBest, f_regression
-from sklearn.linear_model import LogisticRegression, Ridge, Lasso, ElasticNet, LinearRegression
+from sklearn.feature_selection import SelectKBest, RFE
+from sklearn.linear_model import (LogisticRegression, Ridge, Lasso, ElasticNet, LinearRegression,
+                                  BayesianRidge, HuberRegressor, PassiveAggressiveRegressor)
 from sklearn.metrics import log_loss, make_scorer
 from sklearn.model_selection import GridSearchCV
-from sklearn.neighbors import KNeighborsRegressor
 from sklearn.pipeline import make_pipeline
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.svm import LinearSVR
 
 from ml.regression_stacking_cv_classifier import RegressionStackingCVClassifier
@@ -51,81 +52,109 @@ DESCRIPT_STAT_END = 355
 DERIVE_STAT_START = 356
 DERIVE_STAT_END = 1111
 
-#TODO LinearSVR - dual=False, epsilon=0
+random_state = 42
+numpy.random.seed(random_state)
 
-def rpi_regression():
+n_jobs = 4
+
+
+def rpi_regression1():
     return make_pipeline(ColumnSelector(cols=[i for i in range(RPI_START, RPI_END + 1)]),
                          StandardScaler(),
-                         Ridge())
+                         Ridge(random_state=random_state))
+
+def rpi_regression2():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(RPI_START, RPI_END + 1)]),
+                         StandardScaler(),
+                         BayesianRidge())
+
+def rpi_regression3():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(RPI_START, RPI_END + 1)]),
+                         StandardScaler(),
+                         HuberRegressor())
 
 def pythag_regression():
     return make_pipeline(ColumnSelector(cols=[i for i in range(PYTHAG_START, PYTHAG_END + 1)]),
                          StandardScaler(),
-                         Lasso())
+                         Lasso(random_state=random_state))
 
 def markov_rating_regression():
     return make_pipeline(ColumnSelector(cols=[i for i in range(MARKOV_RATING_START, MARKOV_RATING_END + 1)]),
                          StandardScaler(),
-                         LinearRegression())
+                         RFE(ElasticNet(random_state=random_state), step=.1))
 
-def off_def_rating_regression():
+def off_def_rating_regression1():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(OFFDEF_RATING_START, OFFDEF_RATING_END + 1)]),
+                         SkewnessTransformer(),
+                         StandardScaler(),
+                         RFE(ElasticNet(random_state=random_state), step=.05))
+
+def off_def_rating_regression2():
     return make_pipeline(ColumnSelector(cols=[i for i in range(OFFDEF_RATING_START, OFFDEF_RATING_END + 1)]),
                          StandardScaler(),
+                         FeatureAgglomeration(),
                          LinearRegression())
 
 def descriptive_stat_regression():
     return make_pipeline(ColumnSelector(cols=[i for i in range(DESCRIPT_STAT_START, DESCRIPT_STAT_END + 1)]),
                          StandardScaler(),
-                         LinearRegression())
+                         PCA(random_state=random_state),
+                         LinearSVR(random_state=random_state))
 
 def derived_stat_regression():
     return make_pipeline(ColumnSelector(cols=[i for i in range(DERIVE_STAT_START, DERIVE_STAT_END+1)]),
                          StandardScaler(),
-                         LinearRegression())
+                         PCA(random_state=random_state),
+                         LinearSVR(random_state=random_state))
+
+def polynomial_mixed_regression():
+    return make_pipeline(ColumnSelector(cols=[i for i in range(RPI_START, OFFDEF_RATING_END + 1)]),
+                         StandardScaler(),
+                         SelectKBest(),
+                         PolynomialFeatures(degree=2),
+                         PassiveAggressiveRegressor(tol=.001, max_iter=1000, random_state=random_state))
 
 def mov_to_win(label):
     return int(label > 0)
 
 
 @print_models
-def train_model(X_train, y_train, random_state=None, n_jobs=2, regressors=None):
+def train_model(X_train, y_train, regressors=None):
 
     if not regressors:
-        regressors = [pythag_regression(), rpi_regression()]
+        regressors = [rpi_regression1(),
+                      rpi_regression2(),
+                      rpi_regression3(),
+                      pythag_regression(),
+                      markov_rating_regression(),
+                      off_def_rating_regression1(),
+                      off_def_rating_regression2(),
+                      descriptive_stat_regression(),
+                      derived_stat_regression(),
+                      polynomial_mixed_regression()
+                     ]
+        grid = {'pipeline-1__ridge__alpha': [1, 10, 100],
+                'pipeline-4__lasso__alpha': [1, 10, 100],
+                'pipeline-5__rfe__estimator__alpha': [1, 10, 100],
+                'pipeline-5__rfe__n_features_to_select': [2, 4],
+                'pipeline-6__skewnesstransformer__lmbda': [0, .5, 1, None],
+                'pipeline-6__rfe__estimator__alpha': [1, 10, 100],
+                'pipeline-6__rfe__n_features_to_select': [2, 4],
+                'pipeline-7__featureagglomeration__n_clusters': [4, 8],
+                'pipeline-8__pca__n_components': [2, 4],
+                'pipeline-8__linearsvr__C': [.01, .1, 1],
+                'pipeline-9__pca__n_components': [2, 4],
+                'pipeline-9__linearsvr__C': [.01, .1, 1],
+                'pipeline-10__selectkbest__k': [20, 40],
+                'meta-logisticregression__C': [.01, .1, 1],
+                'meta-logisticregression__penalty': ['l1', 'l2']
+               }
+    else:
+        grid = {}
 
-    stacker = make_pipeline(SelectKBest(score_func=f_regression),
-                            RegressionStackingCVClassifier(regressors=regressors,
-                                                           meta_classifier=LogisticRegression(),
-                                                           to_class_func=mov_to_win))
-
-    # http://blog.kaggle.com/2016/07/21/approaching-almost-any-machine-learning-problem-abhishek-thakur/
-    grid = { #'regressionstackingcvclassifier__pipeline__lasso__alpha': [1, 10, 100],
-             #'regressionstackingcvclassifier__pipeline__lasso__normalize': [True, False],
-             #'regressionstackingcvclassifier__pipeline__ridge__alpha': [1, 10, 100],
-             #'regressionstackingcvclassifier__pipeline__ridge__fit_intercept': [True, False],
-             #'regressionstackingcvclassifier__pipeline__ridge__normalize': [True, False],
-             #'regressionstackingcvclassifier__pipeline__elasticnet__alpha': [1, 10, 100],
-             #'regressionstackingcvclassifier__pipeline__elasticnet__fit_intercept': [True, False],
-             #'regressionstackingcvclassifier__pipeline__elasticnet__normalize': [True, False],
-             #'regressionstackingcvclassifier__pipeline__linearsvr__C': [.01, .1, 1],
-             #'regressionstackingcvclassifier__pipeline__adaboostregressor__loss': ['linear', 'square', 'exponential'],
-             #'regressionstackingcvclassifier__pipeline__gradientboostingregressor__loss': ['ls', 'lad', 'huber'],
-             #'regressionstackingcvclassifier__pipeline__gradientboostingregressor__n_estimators': [100, 300, 500],
-             #'regressionstackingcvclassifier__pipeline__gradientboostingregressor__max_depth': [3, 7, 12],
-             #'regressionstackingcvclassifier__pipeline__gradientboostingregressor__max_features': ['auto', 'sqrt', 'log2'],
-             #'regressionstackingcvclassifier__pipeline__gradientboostingregressor__min_samples_split': [2, 5, 10],
-             #'regressionstackingcvclassifier__pipeline__gradientboostingregressor__min_samples_leaf': [1, 2, 5],
-             #'regressionstackingcvclassifier__pipeline__randomforestregressor__n_estimators': [100, 300, 500],
-             #'regressionstackingcvclassifier__pipeline__randomforestregressor__max_depth': [5, 8, 15],
-             #'regressionstackingcvclassifier__pipeline__randomforestregressor__max_features': ['auto', 'sqrt', 'log2'],
-             #'regressionstackingcvclassifier__pipeline__randomforestregressor__min_samples_split': [2, 5, 10],
-             #'regressionstackingcvclassifier__pipeline__randomforestregressor__min_samples_leaf': [1, 2, 5],
-             #'regressionstackingcvclassifier__pipeline__kneighborsregressor__n_neighbors': [4, 8, 16],
-             #'regressionstackingcvclassifier__pipeline__kneighborsregressor__p': [2, 3],
-             'selectkbest__k': ['all'],
-             #'regressionstackingcvclassifier__pipeline__meta-logisticregression__C': [.01, .1, 1],
-             #'regressionstackingcvclassifier__pipeline__meta-logisticregression__penalty': ['l1', 'l2']
-           }
+    stacker = RegressionStackingCVClassifier(regressors=regressors,
+                                             meta_classifier=LogisticRegression(),
+                                             to_class_func=mov_to_win)
 
     print('Training model ...')
     t1 = time.time()

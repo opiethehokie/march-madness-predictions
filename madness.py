@@ -29,12 +29,8 @@ from sklearn.metrics import classification_report, log_loss, accuracy_score
 from ml.predictions import train_model
 from ml.simulations import simulate_tourney
 from ml.wrangling import (custom_train_test_split, filter_outlier_games, adjust_overtime_games,
-                          assemble_features, negate_home_court_advantage)
+                          assemble_features, create_synthetic_games)
 
-
-# helps get repeatable results
-random_state = 42
-numpy.random.seed(random_state)
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2017.csv'
 SEASON_DATA_FILE = 'data/regular_season_detailed_results_2018.csv'
@@ -140,24 +136,19 @@ if __name__ == '__main__':
     SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
     TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
 
-    # base hyperparameters
-
     start_year = predict_year - 4
     start_day = 30
-
-    outlier_std_devs = 6
-    tourney_multiplyer = 5
 
     predict_matchups, postseason_games = possible_tourney_matchups()
     preseason_games, games = clean_raw_data(start_year, start_day, predict_year)
 
     games = adjust_overtime_games(games)
-    games = filter_outlier_games(games, m=outlier_std_devs)
-    #games = negate_home_court_advantage(games)
+    games = filter_outlier_games(games)
+    games = pandas.concat([games, create_synthetic_games(games)])
 
     games, X_predict = add_features(preseason_games, games, postseason_games)
     X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
-    model = train_model(X_train, y_train, random_state)
+    model = train_model(X_train, y_train)
 
     if X_test.size > 0:
         y_predict = model.predict(X_test)
@@ -166,12 +157,12 @@ if __name__ == '__main__':
         y_predict_probas = model.predict_proba(X_test)
         print('Log loss is %f' % log_loss(y_test, y_predict_probas))
 
-    y_predict = model.predict_proba(X_predict)[:, 1]
-    write_predictions(predict_matchups, y_predict)
+    #y_predict = model.predict_proba(X_predict)[:, 1]
+    #write_predictions(predict_matchups, y_predict)
 
     # post-processing for Kaggle competition (two submissions means we can always get championship game correct)
-    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
-    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
+    #write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
+    #write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
 
     # predict actual tournament bracket for cash money
-    simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
+    #simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))

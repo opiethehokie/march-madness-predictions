@@ -68,25 +68,44 @@ def adjust_overtime_games(data):
             data.at[row.Index, 'Lpf'] = row.Lpf * ot_adj
     return data
 
-def negate_home_court_advantage(data):
+def create_synthetic_games(data, home_factor=.96, neutral_site_factor=1):
     data = data.copy()
-    stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+    # adjust for home court advantage
     for row in data.itertuples(index=True):
-        if row.Wloc == 'H':
-            stats[row.Season][row.Wteam]['home-points'].append(row.Wscore)
-            stats[row.Season][row.Lteam]['away-points'].append(row.Lscore)
-        else:
-            stats[row.Season][row.Wteam]['away-points'].append(row.Wscore)
-            stats[row.Season][row.Lteam]['home-points'].append(row.Lscore)
-        wteam_home = numpy.average(stats[row.Season][row.Wteam]['home-points']) if stats[row.Season][row.Wteam]['home-points'] else 0
-        wteam_away = numpy.average(stats[row.Season][row.Wteam]['away-points']) if stats[row.Season][row.Wteam]['away-points'] else 0
-        lteam_home = numpy.average(stats[row.Season][row.Lteam]['home-points']) if stats[row.Season][row.Lteam]['home-points'] else 0
-        lteam_away = numpy.average(stats[row.Season][row.Lteam]['away-points']) if stats[row.Season][row.Lteam]['away-points'] else 0
-        if row.Wloc == 'H':
-            data.at[row.Index, 'Wscore'] = row.Wscore - (wteam_home - wteam_away)
-        if row.Wloc == 'A':
-            data.at[row.Index, 'Lscore'] = row.Lscore - (lteam_home - lteam_away)
-    return data
+        if row.Wloc != 'N':
+            wadj = home_factor if row.Wloc == 'H' else 1 / home_factor
+            ladj = 2 - home_factor if row.Wloc == 'H' else home_factor
+            data.at[row.Index, 'Wscore'] = row.Wscore * wadj
+            data.at[row.Index, 'Lscore'] = row.Lscore * ladj
+            data.at[row.Index, 'Wfgm'] = row.Wfgm * wadj
+            data.at[row.Index, 'Lfgm'] = row.Lfgm * ladj
+            data.at[row.Index, 'Wfga'] = row.Wfga * wadj
+            data.at[row.Index, 'Lfga'] = row.Lfga * ladj
+            data.at[row.Index, 'Wfgm3'] = row.Wfgm3 * wadj
+            data.at[row.Index, 'Lfgm3'] = row.Lfgm3 * ladj
+            data.at[row.Index, 'Wfga3'] = row.Wfga3 * wadj
+            data.at[row.Index, 'Lfga3'] = row.Lfga3 * ladj
+            data.at[row.Index, 'Wftm'] = row.Wftm * wadj
+            data.at[row.Index, 'Lftm'] = row.Lftm * ladj
+            data.at[row.Index, 'Wfta'] = row.Wfta * wadj
+            data.at[row.Index, 'Lfta'] = row.Lfta * ladj
+            data.at[row.Index, 'Wor'] = row.Wor * wadj
+            data.at[row.Index, 'Lor'] = row.Lor * ladj
+            data.at[row.Index, 'Wdr'] = row.Wdr * wadj
+            data.at[row.Index, 'Ldr'] = row.Ldr * ladj
+            data.at[row.Index, 'Wast'] = row.Wast * wadj
+            data.at[row.Index, 'Last'] = row.Last * ladj
+            data.at[row.Index, 'Wto'] = row.Wto * wadj
+            data.at[row.Index, 'Lto'] = row.Lto * ladj
+            data.at[row.Index, 'Wstl'] = row.Wstl * wadj
+            data.at[row.Index, 'Lstl'] = row.Lstl * ladj
+            data.at[row.Index, 'Wblk'] = row.Wblk * wadj
+            data.at[row.Index, 'Lblk'] = row.Lblk * ladj
+            data.at[row.Index, 'Wpf'] = row.Wpf * wadj
+            data.at[row.Index, 'Lpf'] = row.Lpf * ladj
+    # oversample neutral site games
+    neutral_site_games = data[data.Wloc == 'N']
+    return data.append([neutral_site_games]*neutral_site_factor, ignore_index=True)
 
 def custom_train_test_split(data, predict_year):
     train_games = data[(data.Season != predict_year) | (data.Daynum < TOURNEY_START_DAY)]
