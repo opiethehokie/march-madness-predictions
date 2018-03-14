@@ -97,12 +97,11 @@ def off_def_rating_regression1():
     return make_pipeline(ColumnSelector(cols=[i for i in range(OFFDEF_RATING_START, OFFDEF_RATING_END + 1)]),
                          SkewnessTransformer(lmbda=None),
                          StandardScaler(),
-                         RFE(ElasticNet(random_state=random_state, alpha=10), step=.05, n_features_to_select=4))
+                         RFE(ElasticNet(random_state=random_state, alpha=10), step=.05, n_features_to_select=2))
 
 def off_def_rating_regression2():
     return make_pipeline(ColumnSelector(cols=[i for i in range(OFFDEF_RATING_START, OFFDEF_RATING_END + 1)]),
-                         StandardScaler(),
-                         FeatureAgglomeration(n_clusters=12),
+                         FeatureAgglomeration(n_clusters=2),
                          LinearRegression())
 
 def descriptive_stat_regression():
@@ -126,9 +125,8 @@ def mixed_regression1():
 
 def mixed_regression2():
     return make_pipeline(ColumnSelector(cols=[i for i in range(RPI_START, OFFDEF_RATING_END + 1)]),
-                         VarianceThreshold(threshold=.33),
-                         SymbolicRegressor(random_state=random_state, stopping_criteria=0.05, population_size=500,
-                                           generations=10, tournament_size=10))
+                         VarianceThreshold(threshold=.5),
+                         SymbolicRegressor(random_state=random_state, stopping_criteria=0.05))
 
 def mov_to_win(label):
     return int(label > 0)
@@ -141,15 +139,15 @@ def train_model(X_train, y_train, regressors=None):
         regressors = [rpi_regression1(),
                       rpi_regression2(),
                       rpi_regression3(),
-                      #pythag_regression(),
+                      pythag_regression(),
                       markov_rating_regression1(),
                       markov_rating_regression2(),
-                      #off_def_rating_regression1(),
-                      #off_def_rating_regression2(),
-                      #descriptive_stat_regression(),
+                      off_def_rating_regression1(),
+                      off_def_rating_regression2(),
+                      descriptive_stat_regression(),
                       derived_stat_regression(),
-                      #mixed_regression1(),
-                      #mixed_regression2()
+                      mixed_regression1(),
+                      mixed_regression2()
                      ]
 
     grid = {#'meta-logisticregression__C': [.01, .1, 1],
