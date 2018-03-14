@@ -70,6 +70,12 @@ def differentiate_final_predictions(matchups, predictions, new_value):
     for idx, matchup in enumerate(matchups):
         if possible_tourney_final(slots, seeds, matchup):
             diff_predictions[idx] = new_value
+        else:
+            if diff_predictions[idx] >= .7:
+                diff_predictions[idx] = diff_predictions[idx] + .001
+            if diff_predictions[idx] <= .3:
+                diff_predictions[idx] = diff_predictions[idx] - .001
+            assert diff_predictions[idx] > 0 and diff_predictions[idx] < 1
     return diff_predictions
 
 def read_predictions():
@@ -146,7 +152,10 @@ if __name__ == '__main__':
     games = filter_outlier_games(games)
     games = pandas.concat([games, create_synthetic_games(games)])
 
+    #TODO try diff of stats instead of separate feature for each team
+    #TODO try clustering teams as feature (maybe it represents geo, conf, another measure of strenght?)
     games, X_predict = add_features(preseason_games, games, postseason_games)
+    
     X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
     model = train_model(X_train, y_train)
 
@@ -157,12 +166,12 @@ if __name__ == '__main__':
         y_predict_probas = model.predict_proba(X_test)
         print('Log loss is %f' % log_loss(y_test, y_predict_probas))
 
-    #y_predict = model.predict_proba(X_predict)[:, 1]
-    #write_predictions(predict_matchups, y_predict)
+    y_predict = model.predict_proba(X_predict)[:, 1]
+    write_predictions(predict_matchups, y_predict)
 
     # post-processing for Kaggle competition (two submissions means we can always get championship game correct)
-    #write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
-    #write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
+    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
+    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
 
     # predict actual tournament bracket for cash money
-    #simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
+    simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))

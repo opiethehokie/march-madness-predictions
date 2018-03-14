@@ -19,22 +19,6 @@ S7: Nevada
 S10: Texas
 S2: Cincinnati
 S15: Georgia St
-E1: Villanova
-E16: Long Island | Radford
-E8: Virginia Tech
-E9: Alabama
-E5: West Virginia
-E12: Murray St
-E4: Wichita St
-E13: Marshall
-E6: Florida
-E11: St Bonaventure | UCLA
-E3: Texas Tech
-E14: SF Austin
-E7: Arkansas
-E10: Butler
-E2: Purdue
-E15: CS Fullerton
 W1: Xavier
 W16: NC Central | TX Southern
 W8: Missouri
@@ -51,6 +35,22 @@ W7: Texas A&M
 W10: Providence
 W2: North Carolina
 W15: Lipscomb
+E1: Villanova
+E16: Long Island | Radford
+E8: Virginia Tech
+E9: Alabama
+E5: West Virginia
+E12: Murray St
+E4: Wichita St
+E13: Marshall
+E6: Florida
+E11: St Bonaventure | UCLA
+E3: Texas Tech
+E14: SF Austin
+E7: Arkansas
+E10: Butler
+E2: Purdue
+E15: CS Fullerton
 M1: Kansas
 M16: Penn
 M8: Seton Hall

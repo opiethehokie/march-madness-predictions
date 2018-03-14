@@ -84,4 +84,4 @@ def test_custom_cv():
 def test_custom_log_loss():
     movs = numpy.array([4, 5, -3, 11, -22])
     predictions = numpy.array([.6, .6, .48, .8, .2])
-    assert custom_log_loss(movs, predictions, mov_to_win) == 0.42437296351341292
+    assert custom_log_loss(movs, predictions, mov_to_win) == -0.42437296351341292

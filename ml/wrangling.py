@@ -144,7 +144,6 @@ def describe_stats(results):
         described.append(numpy.std(results[stat]))
         described.append(numpy.median(results[stat]))
         described.append(numpy.mean(results[stat]))
-        #TODO
         #described.append(scipy.stats.kurtosis(results[stat], fisher=False))
         #described.append(scipy.stats.skew(results[stat]))
     return described
