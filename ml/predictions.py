@@ -33,7 +33,7 @@ from sklearn.svm import LinearSVR
 #from skopt.space import Real, Categorical, Integer
 
 from ml.regression_stacking_cv_classifier import RegressionStackingCVClassifier
-from ml.transformers import ColumnSelector, SkewnessTransformer
+from ml.transformers import ColumnSelector, SkewnessTransformer, DiffTransformer
 from ml.wrangling import TOURNEY_START_DAY
 from ml.util import print_models
 
@@ -79,7 +79,7 @@ def rpi_regression3():
 
 def pythag_regression():
     return make_pipeline(ColumnSelector(cols=[i for i in range(PYTHAG_START, PYTHAG_END + 1)]),
-                         SkewnessTransformer(lmbda=None),
+                         DiffTransformer(),
                          StandardScaler(),
                          Lasso(random_state=random_state, alpha=1))
 
@@ -95,7 +95,6 @@ def markov_rating_regression2():
 
 def off_def_rating_regression1():
     return make_pipeline(ColumnSelector(cols=[i for i in range(OFFDEF_RATING_START, OFFDEF_RATING_END + 1)]),
-                         SkewnessTransformer(lmbda=None),
                          StandardScaler(),
                          RFE(ElasticNet(random_state=random_state, alpha=10), step=.05, n_features_to_select=2))
 

@@ -40,10 +40,10 @@ class DebugFeatureProperties(BaseEstimator, TransformerMixin):
         df = pandas.DataFrame(X)
         print(df.shape)
         print(df.head(3))
-        #print(df.describe())
-        #print(skew(df))
-        #print(df.cov())
-        #print(df.corr())
+        print(df.describe())
+        print(skew(df))
+        print(df.cov())
+        print(df.corr())
         return self
 
     #pylint: disable=no-self-use
@@ -71,3 +71,14 @@ class SkewnessTransformer(BaseEstimator, TransformerMixin):
         for idx in very_skewed_feats.index:
             transformed[idx] = boxcox(X[idx]+1, lmbda=self.lmbda)[0]
         return transformed.values
+
+class DiffTransformer(BaseEstimator, TransformerMixin):
+
+    def fit(self, _X, _y=None):
+        return self
+
+    def transform(self, X):
+        df = pandas.DataFrame(X)
+        even_df = df.iloc[:, [i for i in range(len(df.columns)) if i%2 == 0]]
+        odd_df = df.iloc[:, [i for i in range(len(df.columns)) if i%2 == 1]]
+        return pandas.DataFrame(even_df.values - odd_df.values).values

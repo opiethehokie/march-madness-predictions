@@ -152,10 +152,8 @@ if __name__ == '__main__':
     games = filter_outlier_games(games)
     games = pandas.concat([games, create_synthetic_games(games)])
 
-    #TODO try diff of stats instead of separate feature for each team
-    #TODO try clustering teams as feature (maybe it represents geo, conf, another measure of strenght?)
     games, X_predict = add_features(preseason_games, games, postseason_games)
-    
+
     X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
     model = train_model(X_train, y_train)
 
