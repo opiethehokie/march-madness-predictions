@@ -25,12 +25,12 @@ from sklearn.feature_selection import SelectKBest, RFE, VarianceThreshold
 from sklearn.linear_model import (LogisticRegression, Ridge, Lasso, ElasticNet, LinearRegression,
                                   BayesianRidge, HuberRegressor, PassiveAggressiveRegressor)
 from sklearn.metrics import log_loss, make_scorer
-from sklearn.model_selection import GridSearchCV
+#from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.svm import LinearSVR
-#from skopt import BayesSearchCV
-#from skopt.space import Real, Categorical, Integer
+from skopt import BayesSearchCV
+from skopt.space import Real, Categorical, Integer
 
 from ml.regression_stacking_cv_classifier import RegressionStackingCVClassifier
 from ml.transformers import ColumnSelector, SkewnessTransformer, DiffTransformer
@@ -149,14 +149,28 @@ def train_model(X_train, y_train, regressors=None):
                       mixed_regression2()
                      ]
 
-    grid = {#'meta-logisticregression__C': [.01, .1, 1],
-            #'meta-logisticregression__penalty': ['l1', 'l2']
-           }
-
-    #grid = {'pipeline-10__pca__n_components': Integer(1, 8),
-    #        'meta-logisticregression__C': Real(1e-3, 1e+1, prior='log-uniform'),
-    #        'meta-logisticregression__penalty': Categorical(['l1', 'l2'])
+    #grid = {'meta-logisticregression__C': [.01, .1, 1],
+    #        'meta-logisticregression__penalty': ['l1', 'l2']
     #       }
+
+    grid = {#'pipeline-1__ridge__alpha': Real(1e+0, 1e+2, prior='log-uniform'),
+            #'pipeline-4__lasso__alpha': Real(1e+0, 1e+2, prior='log-uniform'),
+            #'pipeline-5__rfe__estimator__alpha': Real(1e+0, 1e+2, prior='log-uniform'),
+            #'pipeline-5__rfe__n_features_to_select': Integer(2, 6),
+            #'pipeline-6__factorizationmachineregressor__n_components': Integer(1, 2),
+            #'pipeline-7__rfe__n_features_to_select': Integer(2, 6),
+            #'pipeline-7__rfe__estimator__alpha': Real(1e+0, 1e+2, prior='log-uniform'),
+            #'pipeline-8__featureagglomeration__n_clusters': Integer(2, 4),
+            #'pipeline-9__pca__n_components': Integer(1, 4),
+            #'pipeline-9__linearsvr__C': Real(1e-2, 1e+0, prior='log-uniform'),
+            #'pipeline-10__pca__n_components': Integer(1, 4),
+            #'pipeline-10__linearsvr__C': Real(1e-2, 1e+0, prior='log-uniform'),
+            #'pipeline-11__selectkbest__k': Integer(10, 30),
+            #'pipeline-12__variancethreshold__threshold': Real(0, 1),
+            #'meta-logisticregression__C': Real(1e-2, 1e+0, prior='log-uniform'),
+            #'meta-logisticregression__penalty': Categorical(['l1', 'l2'])
+            'meta-logisticregression__penalty': Categorical(['l2'])
+           }
 
     stacker = RegressionStackingCVClassifier(regressors=regressors,
                                              meta_classifier=LogisticRegression(penalty='l2', C=1),
@@ -166,10 +180,10 @@ def train_model(X_train, y_train, regressors=None):
     t1 = time.time()
     cv = custom_cv(X_train)
     scoring = make_scorer(custom_log_loss, needs_proba=True, to_class_func=mov_to_win)
-    model = GridSearchCV(estimator=stacker, param_grid=grid, scoring=scoring, cv=cv, n_jobs=n_jobs)
-    model.fit(X_train, y_train)
-    #model = BayesSearchCV(stacker, grid, scoring=scoring, cv=cv, n_jobs=n_jobs, random_state=random_state)
+    #model = GridSearchCV(estimator=stacker, param_grid=grid, scoring=scoring, cv=cv, n_jobs=n_jobs)
     #model.fit(X_train, y_train)
+    model = BayesSearchCV(stacker, grid, scoring=scoring, cv=cv, n_jobs=n_jobs, random_state=random_state, n_iter=1)
+    model.fit(X_train, y_train)
     t2 = time.time()
     print('Training took %f seconds' % (t2 - t1))
     return model
