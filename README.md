@@ -8,7 +8,7 @@ Create Conda environment (tested with 64-bit Anaconda Python 3.6 on Windows):
 
 `conda env create -f environment.yml`
 
-Predict tournament games for years 2015+:
+Predict tournament games for years 2013+:
 
 `python madness.py <year>`
 

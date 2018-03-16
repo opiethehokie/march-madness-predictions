@@ -172,4 +172,5 @@ if __name__ == '__main__':
     write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
 
     # predict actual tournament bracket for cash money
-    simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
+    if predict_year >= 2015:
+        simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))
