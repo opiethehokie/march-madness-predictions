@@ -1,4 +1,4 @@
-#   Copyright 2016 Michael Peters
+#   Copyright 2016-2018 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -13,35 +13,33 @@
 #   limitations under the License.
 
 
-import csv
+import os
 import sys
 
 from collections import defaultdict
 
+import csv
 import numpy
 import pandas
 import yaml
 import yamlordereddictloader
 
-from sklearn.metrics import classification_report, log_loss
+from sklearn.metrics import classification_report, log_loss, accuracy_score
 
-from ml.classification import train_model
+from ml.predictions import train_model
 from ml.simulations import simulate_tourney
-from ml.wrangling import custom_train_test_split, oversample_tourney_games
-#from ml.wrangling import filter_outlier_games
-from ml.visualizations import plot_auc, plot_confusion_matrix
+from ml.wrangling import (custom_train_test_split, filter_outlier_games, adjust_overtime_games,
+                          assemble_features, create_synthetic_games)
 
 
-# helps get repeatable results
-random_state = 17
-numpy.random.seed(random_state)
-
-TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2016.csv'
-SEASON_DATA_FILE = 'data/regular_season_detailed_results_2017.csv'
+TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2017.csv'
+SEASON_DATA_FILE = 'data/regular_season_detailed_results_2018.csv'
 SUBMISSION_FILE = 'results/submission.csv'
 TEAMS_FILE = 'data/teams.csv'
-SEEDS_FILE = 'data/seeds_2017.csv'
-SLOTS_FILE = 'data/slots_2017.csv'
+SEEDS_FILE = 'data/seeds_2018.csv'
+SLOTS_FILE = 'data/slots_2018.csv'
+FEATURE_CACHE_FILE = 'data/feature_cache.csv'
+PREDICT_CACHE_FILE = 'data/predict_cache.csv'
 
 
 def clean_raw_data(syear, sday, eyear):
@@ -60,8 +58,8 @@ def clean_raw_data(syear, sday, eyear):
     return preseason, season
 
 def write_predictions(matchups, predictions, suffix=''):
-    with open(SUBMISSION_FILE.replace('.csv', suffix + '.csv'), 'w') as csvfile:
-        writer = csv.writer(csvfile)
+    with open(SUBMISSION_FILE.replace('.csv', suffix + '.csv'), 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile, lineterminator='\n')
         writer.writerow(['Id', 'Pred'])
         writer.writerows(numpy.column_stack((matchups, predictions)))
 
@@ -72,14 +70,19 @@ def differentiate_final_predictions(matchups, predictions, new_value):
     for idx, matchup in enumerate(matchups):
         if possible_tourney_final(slots, seeds, matchup):
             diff_predictions[idx] = new_value
+        else:
+            if diff_predictions[idx] >= .7:
+                diff_predictions[idx] = diff_predictions[idx] + .001
+            if diff_predictions[idx] <= .3:
+                diff_predictions[idx] = diff_predictions[idx] - .001
+            assert diff_predictions[idx] > 0 and diff_predictions[idx] < 1
     return diff_predictions
 
 def read_predictions():
-    with open(SUBMISSION_FILE) as csvfile:
-        lines = csvfile.readlines()[1:]
-        reader = csv.reader(lines)
-        predictions = {k[5:]:float(v) for k, v in reader}
-    return predictions
+    with open(SUBMISSION_FILE, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        predictions = {row['Id'][5:]: float(row['Pred']) for row in reader}
+        return predictions
 
 def possible_tourney_matchups():
     matchups = pandas.read_csv(SAMPLE_SUBMISSION_FILE)['Id']
@@ -98,15 +101,14 @@ def possible_tourney_final(slots, seeds, matchup):
             (champ_regions2.find(teama_region) > -1 and champ_regions1.find(teamb_region) > -1))
 
 def team_id_mapping():
-    with open(TEAMS_FILE) as csvfile:
-        lines = csvfile.readlines()[1:]
-        reader = csv.reader(lines)
-        teams = {v:int(k) for k, v in reader}
+    with open(TEAMS_FILE, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        teams = {row['Team_Name']: int(row['Team_Id']) for row in reader}
     return teams
 
 def team_seed_mapping():
     seeds = defaultdict(lambda: defaultdict(str))
-    with open(SEEDS_FILE) as csvfile:
+    with open(SEEDS_FILE, newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             seeds[row['Season']][row['Team']] = row['Seed']
@@ -114,51 +116,54 @@ def team_seed_mapping():
 
 def championship_pairings():
     slots = defaultdict()
-    with open(SLOTS_FILE) as csvfile:
+    with open(SLOTS_FILE, newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
             if row['Slot'] == 'R6CH':
                 slots[row['Season']] = (row['Strongseed'], row['Weakseed'])
     return slots
 
+def add_features(pre_data, data, post_data):
+    if not os.path.isfile(FEATURE_CACHE_FILE) or not os.path.isfile(PREDICT_CACHE_FILE):
+        features, features_predict = assemble_features(pre_data, data, post_data)
+        features.to_csv(FEATURE_CACHE_FILE)
+        pandas.DataFrame(features_predict).to_csv(PREDICT_CACHE_FILE)
+        assert features.shape[1] == 34 + 1108
+        assert features_predict.shape[1] == 4 + 1108
+    features = pandas.read_csv(FEATURE_CACHE_FILE, index_col=0)
+    features_predict = pandas.read_csv(PREDICT_CACHE_FILE, index_col=0)
+    return features, features_predict.values.astype('float64')
 
-# base hyperparameters
 
-predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2015
+if __name__ == '__main__':
 
-start_year = predict_year - 4
-start_day = 15
+    predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2017
 
-SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
-TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
+    SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
+    TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
 
-outlier_std_devs = 6
-tourney_multiplyer = 10
+    start_year = predict_year - 4
+    start_day = 30
 
-# initial pre-processing
-_, games = clean_raw_data(start_year, start_day, predict_year)
+    predict_matchups, postseason_games = possible_tourney_matchups()
+    preseason_games, games = clean_raw_data(start_year, start_day, predict_year)
 
-#games = filter_outlier_games(games, outlier_std_devs)
+    games = adjust_overtime_games(games)
+    games = filter_outlier_games(games)
+    games = pandas.concat([games, create_synthetic_games(games)])
 
-_, X_test, _, y_test = custom_train_test_split(games, predict_year)
-games = oversample_tourney_games(games, tourney_multiplyer)
+    games, X_predict = add_features(preseason_games, games, postseason_games)
 
-# training
-X_train, _, y_train, _ = custom_train_test_split(games, predict_year)
-model = train_model(X_train, y_train, random_state)
+    X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
+    model = train_model(X_train, y_train)
 
-if len(X_test) > 0:
-    y_predict_probas = model.predict_proba(X_test)
-    print(log_loss(y_test, y_predict_probas))
-    plot_auc(y_test, y_predict_probas[:, 1])
-    y_predict = model.predict(X_test)
-    print(classification_report(y_test, y_predict))
-    plot_confusion_matrix(y_test, y_predict)
+    if X_test.size > 0:
+        y_predict = model.predict(X_test)
+        print(classification_report(y_test, y_predict))
+        print('Accuracy is %f' % accuracy_score(y_test, y_predict))
+        y_predict_probas = model.predict_proba(X_test)
+        print('Log loss is %f' % log_loss(y_test, y_predict_probas))
 
-if predict_year >= 2015:
-
-    # predict all possible tournament games for Kaggle competition
-    predict_matchups, X_predict = possible_tourney_matchups()
     y_predict = model.predict_proba(X_predict)[:, 1]
     write_predictions(predict_matchups, y_predict)
 
@@ -166,5 +171,5 @@ if predict_year >= 2015:
     write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
     write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
 
-    # predict actual tournament bracket
+    # predict actual tournament bracket for cash money
     simulate_tourney(team_id_mapping(), read_predictions(), yaml.load(open(TOURNEY_FORMAT_FILE), Loader=yamlordereddictloader.Loader))

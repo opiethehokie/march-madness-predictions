@@ -1,42 +1,35 @@
 # Machine Learning March Madness Predictions
 
-[![Build Status](https://travis-ci.org/opiethehokie/march-madness-predictions.svg?branch=master)](https://travis-ci.org/opiethehokie/march-madness-predictions)
-
-[Blog post describing methodology](http://www.programmingopiethehokie.com/2017/01/machine-learning-for-ncaa-basketball.html)
-
-[Blog post describing performance optimizations to my rating calculators](http://www.programmingopiethehokie.com/2017/02/machine-learning-for-ncaa-basketball.html)
+https://www.kaggle.com/c/mens-machine-learning-competition-2018
 
 ## Usage
 
-Build Docker image:
+Create Conda environment (tested with 64-bit Anaconda Python 3.6 on Windows):
 
-`docker build -t madness .`
+`conda env create -f environment.yml`
 
-Predict tournament games for years 2012 - 2017:
+Predict tournament games for years 2015+:
 
-`docker run --rm -it -v $PWD:/workdir madness python3 madness.py <year>`
+`python madness.py <year>`
+
+Delete 'data/*cache.csv' files when switching years.
+
+Probabilities for every possible tournament game are written to CSV files in the results directory. These are then used to simulate the tournament and the results are printed to the console to be used for filling out a traditional bracket.
 
 ## Development
 
-Run basic unit tests:
-
-`docker run --rm -it -v $PWD:/workdir madness py.test --cov=. --ignore ml/tests/test_classification.py`
-
 Run all tests:
 
-`docker run --rm -it -v $PWD:/workdir madness py.test --cov=.`
+`py.test`
 
 Run pylint static analysis:
 
-`docker run --rm -it -v $PWD:/workdir madness pylint madness.py && pylint ml && pylint ratings`
-
-Profile section of code:
-
-```python
-from ml.wrangling import profile
-
-@profile
-def slow_func() ...
+```
+pylint madness.py
+pylint ml
+pylint ratings
 ```
 
+Generate code coverage report:
 
+`py.test --cov-report html --cov .`
