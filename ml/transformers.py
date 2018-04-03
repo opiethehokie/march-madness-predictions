@@ -40,10 +40,10 @@ class DebugFeatureProperties(BaseEstimator, TransformerMixin):
         df = pandas.DataFrame(X)
         print(df.shape)
         print(df.head(3))
-        print(df.describe())
-        print(skew(df))
-        print(df.cov())
-        print(df.corr())
+        #print(df.describe())
+        #print(skew(df))
+        #print(df.cov())
+        #print(df.corr())
         return self
 
     #pylint: disable=no-self-use
@@ -77,6 +77,7 @@ class DiffTransformer(BaseEstimator, TransformerMixin):
     def fit(self, _X, _y=None):
         return self
 
+    #pylint: disable=no-self-use
     def transform(self, X):
         df = pandas.DataFrame(X)
         even_df = df.iloc[:, [i for i in range(len(df.columns)) if i%2 == 0]]

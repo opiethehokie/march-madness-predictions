@@ -22,14 +22,16 @@ import csv
 import numpy
 import pandas
 import yaml
-import yamlordereddictloader
 
-from sklearn.metrics import classification_report, log_loss, accuracy_score
+from sklearn.metrics import log_loss
+
+import yamlordereddictloader
 
 from ml.predictions import train_model
 from ml.simulations import simulate_tourney
+from ml.util import mov_to_win_percent
 from ml.wrangling import (custom_train_test_split, filter_outlier_games, adjust_overtime_games,
-                          assemble_features, create_synthetic_games)
+                          assemble_features, tourney_mov_std)
 
 
 TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2017.csv'
@@ -46,7 +48,7 @@ def clean_raw_data(syear, sday, eyear):
     def read_data(results_file):
         return pandas.read_csv(results_file)
     data = (pandas.concat([read_data(SEASON_DATA_FILE), read_data(TOURNEY_DATA_FILE)])
-            .sort_values(by='Daynum'))
+            .sort_values(by=['Daynum', 'Wteam', 'Lteam']))
     preseason = (data.pipe(lambda df: df[df.Season >= syear])
                  .pipe(lambda df: df[df.Season <= eyear])
                  .pipe(lambda df: df[df.Daynum < sday]))
@@ -70,12 +72,6 @@ def differentiate_final_predictions(matchups, predictions, new_value):
     for idx, matchup in enumerate(matchups):
         if possible_tourney_final(slots, seeds, matchup):
             diff_predictions[idx] = new_value
-        else:
-            if diff_predictions[idx] >= .7:
-                diff_predictions[idx] = diff_predictions[idx] + .001
-            if diff_predictions[idx] <= .3:
-                diff_predictions[idx] = diff_predictions[idx] - .001
-            assert diff_predictions[idx] > 0 and diff_predictions[idx] < 1
     return diff_predictions
 
 def read_predictions():
@@ -127,9 +123,9 @@ def add_features(pre_data, data, post_data):
     if not os.path.isfile(FEATURE_CACHE_FILE) or not os.path.isfile(PREDICT_CACHE_FILE):
         features, features_predict = assemble_features(pre_data, data, post_data)
         features.to_csv(FEATURE_CACHE_FILE)
-        pandas.DataFrame(features_predict).to_csv(PREDICT_CACHE_FILE)
+        features_predict.to_csv(PREDICT_CACHE_FILE)
         assert features.shape[1] == 34 + 1108
-        assert features_predict.shape[1] == 4 + 1108
+        assert features_predict.shape == (2278, 4 + 1108)
     features = pandas.read_csv(FEATURE_CACHE_FILE, index_col=0)
     features_predict = pandas.read_csv(PREDICT_CACHE_FILE, index_col=0)
     return features, features_predict.values.astype('float64')
@@ -142,15 +138,16 @@ if __name__ == '__main__':
     SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
     TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
 
-    start_year = predict_year - 4
-    start_day = 30
+    start_year = predict_year - 7
+    start_day = 5
 
     predict_matchups, postseason_games = possible_tourney_matchups()
     preseason_games, games = clean_raw_data(start_year, start_day, predict_year)
 
     games = adjust_overtime_games(games)
     games = filter_outlier_games(games)
-    games = pandas.concat([games, create_synthetic_games(games)])
+
+    m = tourney_mov_std(games)
 
     games, X_predict = add_features(preseason_games, games, postseason_games)
 
@@ -159,13 +156,14 @@ if __name__ == '__main__':
 
     if X_test.size > 0:
         y_predict = model.predict(X_test)
-        print(classification_report(y_test, y_predict))
-        print('Accuracy is %f' % accuracy_score(y_test, y_predict))
-        y_predict_probas = model.predict_proba(X_test)
-        print('Log loss is %f' % log_loss(y_test, y_predict_probas))
+        y_predict_probas = [mov_to_win_percent(yi, m) for yi in y_predict]
+        for i, yi in enumerate(y_predict_probas):
+            print(yi, y_test[i], log_loss([y_test[i]], [yi], labels=[0, 1]))
+        print('Average log loss is %f' % log_loss(y_test, y_predict_probas))
 
-    y_predict = model.predict_proba(X_predict)[:, 1]
-    write_predictions(predict_matchups, y_predict)
+    y_predict = model.predict(X_predict)
+    y_predict_probas = [mov_to_win_percent(yi, m) for yi in y_predict]
+    write_predictions(predict_matchups, y_predict_probas)
 
     # post-processing for Kaggle competition (two submissions means we can always get championship game correct)
     write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')

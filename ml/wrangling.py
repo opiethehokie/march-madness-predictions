@@ -25,11 +25,11 @@ from ratings.off_def import adjust_stats
 from ratings.markov import markov_stats
 
 
-TOURNEY_START_DAY = 136
+TOURNEY_START_DAY = 134
 
 # pre-processing
 
-def filter_outlier_games(data, m=3):
+def filter_outlier_games(data, m=6):
     numeric_data = data.select_dtypes(include=['int64'])
     return data[(numpy.abs(scipy.stats.zscore(numeric_data)) < m).all(axis=1)]
 
@@ -68,55 +68,22 @@ def adjust_overtime_games(data):
             data.at[row.Index, 'Lpf'] = row.Lpf * ot_adj
     return data
 
-def create_synthetic_games(data, home_factor=.96, neutral_site_factor=1):
+def oversample_neutral_site_games(data, factor=2):
     data = data.copy()
-    # adjust for home court advantage
-    for row in data.itertuples(index=True):
-        if row.Wloc != 'N':
-            wadj = home_factor if row.Wloc == 'H' else 1 / home_factor
-            ladj = 2 - home_factor if row.Wloc == 'H' else home_factor
-            data.at[row.Index, 'Wscore'] = row.Wscore * wadj
-            data.at[row.Index, 'Lscore'] = row.Lscore * ladj
-            data.at[row.Index, 'Wfgm'] = row.Wfgm * wadj
-            data.at[row.Index, 'Lfgm'] = row.Lfgm * ladj
-            data.at[row.Index, 'Wfga'] = row.Wfga * wadj
-            data.at[row.Index, 'Lfga'] = row.Lfga * ladj
-            data.at[row.Index, 'Wfgm3'] = row.Wfgm3 * wadj
-            data.at[row.Index, 'Lfgm3'] = row.Lfgm3 * ladj
-            data.at[row.Index, 'Wfga3'] = row.Wfga3 * wadj
-            data.at[row.Index, 'Lfga3'] = row.Lfga3 * ladj
-            data.at[row.Index, 'Wftm'] = row.Wftm * wadj
-            data.at[row.Index, 'Lftm'] = row.Lftm * ladj
-            data.at[row.Index, 'Wfta'] = row.Wfta * wadj
-            data.at[row.Index, 'Lfta'] = row.Lfta * ladj
-            data.at[row.Index, 'Wor'] = row.Wor * wadj
-            data.at[row.Index, 'Lor'] = row.Lor * ladj
-            data.at[row.Index, 'Wdr'] = row.Wdr * wadj
-            data.at[row.Index, 'Ldr'] = row.Ldr * ladj
-            data.at[row.Index, 'Wast'] = row.Wast * wadj
-            data.at[row.Index, 'Last'] = row.Last * ladj
-            data.at[row.Index, 'Wto'] = row.Wto * wadj
-            data.at[row.Index, 'Lto'] = row.Lto * ladj
-            data.at[row.Index, 'Wstl'] = row.Wstl * wadj
-            data.at[row.Index, 'Lstl'] = row.Lstl * ladj
-            data.at[row.Index, 'Wblk'] = row.Wblk * wadj
-            data.at[row.Index, 'Lblk'] = row.Lblk * ladj
-            data.at[row.Index, 'Wpf'] = row.Wpf * wadj
-            data.at[row.Index, 'Lpf'] = row.Lpf * ladj
-    # oversample neutral site games
-    neutral_site_games = data[data.Wloc == 'N']
-    return data.append([neutral_site_games]*neutral_site_factor, ignore_index=True)
+    neutral_site_games = data[(data.Wloc == 'N') & (data.Daynum < TOURNEY_START_DAY)]
+    return data.append([neutral_site_games]*factor, ignore_index=True)
+
+def _mov(df):
+    if df.Wteam < df.Lteam:
+        return df.Wscore - df.Lscore # 1 for classification
+    return df.Lscore - df.Wscore # 0 for classification
 
 def custom_train_test_split(data, predict_year):
     train_games = data[(data.Season != predict_year) | (data.Daynum < TOURNEY_START_DAY)]
     holdout_games = data[(data.Season == predict_year) & (data.Daynum >= TOURNEY_START_DAY)]
-    def mov(df):
-        if df.Wteam < df.Lteam:
-            return df.Wscore - df.Lscore # 1 for classification
-        return df.Lscore - df.Wscore # 0 for classification
     def win(df):
         return int(df.Wteam < df.Lteam)
-    train_results = train_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(mov, axis=1)
+    train_results = train_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(_mov, axis=1)
     holdout_results = holdout_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(win, axis=1)
     not_needed_cols = ['Wscore', 'Lscore', 'Wloc', 'Numot', 'Wfgm', 'Wfga', 'Wfgm3', 'Wfga3', 'Wftm', 'Wfta',
                        'Wor', 'Wdr', 'Wast', 'Wto', 'Wstl', 'Wblk', 'Wpf', 'Lfgm', 'Lfga', 'Lfgm3', 'Lfga3', 'Lftm',
@@ -124,6 +91,11 @@ def custom_train_test_split(data, predict_year):
     train_games = train_games.drop(columns=not_needed_cols)
     holdout_games = holdout_games.drop(columns=not_needed_cols)
     return train_games.values.astype('float64'), holdout_games.values.astype('float64'), train_results.values, holdout_results.values
+
+def tourney_mov_std(data):
+    tourney_games = data[(data.Daynum >= TOURNEY_START_DAY)]
+    movs = tourney_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(_mov, axis=1)
+    return numpy.std(movs)
 
 # data prep
 
@@ -173,12 +145,18 @@ def _opponents_opponents_win_percent(season_results, opponents):
 
 def modified_rpi(X, X_pred, weights=(.15, .15, .7)):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+    fstats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     rpis = []
     for row in X.itertuples(index=False):
-        stats[row.Season][row.Wteam]['opponents'].append(row.Lteam)
-        stats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
-        stats[row.Season][row.Wteam]['results'].append(1)
-        stats[row.Season][row.Lteam]['results'].append(0)
+        if row.Daynum < TOURNEY_START_DAY:
+            stats[row.Season][row.Wteam]['opponents'].append(row.Lteam)
+            stats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
+            stats[row.Season][row.Wteam]['results'].append(1)
+            stats[row.Season][row.Lteam]['results'].append(0)
+        fstats[row.Season][row.Wteam]['opponents'].append(row.Lteam)
+        fstats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
+        fstats[row.Season][row.Wteam]['results'].append(1)
+        fstats[row.Season][row.Lteam]['results'].append(0)
         wrpi = _rpi(stats[row.Season], row.Wteam, weights)
         lrpi = _rpi(stats[row.Season], row.Lteam, weights)
         if row.Wteam < row.Lteam:
@@ -206,10 +184,11 @@ def pythagorean_expectation(X, X_pred, exponent=10.25):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     pythags = []
     for row in X.itertuples(index=False):
-        stats[row.Season][row.Wteam]['points'].append(row.Wscore)
-        stats[row.Season][row.Wteam]['points-against'].append(row.Lscore)
-        stats[row.Season][row.Lteam]['points'].append(row.Lscore)
-        stats[row.Season][row.Lteam]['points-against'].append(row.Wscore)
+        if row.Daynum < TOURNEY_START_DAY:
+            stats[row.Season][row.Wteam]['points'].append(row.Wscore)
+            stats[row.Season][row.Wteam]['points-against'].append(row.Lscore)
+            stats[row.Season][row.Lteam]['points'].append(row.Lscore)
+            stats[row.Season][row.Lteam]['points-against'].append(row.Wscore)
         wpythag = _pythagorean_expectation(stats[row.Season][row.Wteam], exponent)
         lpythag = _pythagorean_expectation(stats[row.Season][row.Lteam], exponent)
         if row.Wteam < row.Lteam:
@@ -248,30 +227,31 @@ def advanced_statistic_ratings(X, X_pred, rating_F, preseason_games=None):
     day = 0
     adj_stats = None
     for row in X.itertuples(index=False):
-        wteam_id = teams[row.Season][row.Wteam]
-        lteam_id = teams[row.Season][row.Lteam]
-        wposs = row.Wfga - row.Wor + row.Wto + .475 * row.Wfta
-        lposs = row.Lfga - row.Lor + row.Lto + .475 * row.Lfta
-        stats[row.Season][wteam_id][lteam_id][stat_categories['eff_field_goal_percent']] += ((row.Wfgm + .5 * row.Wfgm3) / row.Wfga)
-        stats[row.Season][lteam_id][wteam_id][stat_categories['eff_field_goal_percent']] += ((row.Lfgm + .5 * row.Lfgm3) / row.Lfga)
-        stats[row.Season][wteam_id][lteam_id][stat_categories['true_shooting']] += (.5 * row.Wscore / (row.Wfga + 0.475 * row.Wfta))
-        stats[row.Season][lteam_id][wteam_id][stat_categories['true_shooting']] += (.5 * row.Lscore / (row.Lfga + 0.475 * row.Lfta))
-        stats[row.Season][wteam_id][lteam_id][stat_categories['rebound_rate']] += row.Wor / (row.Wor + row.Ldr)
-        stats[row.Season][lteam_id][wteam_id][stat_categories['rebound_rate']] += row.Lor / (row.Lor + row.Wdr)
-        stats[row.Season][wteam_id][lteam_id][stat_categories['free_throw_rate']] += (row.Wfta / row.Wftm) if row.Wftm > 0 else 0
-        stats[row.Season][lteam_id][wteam_id][stat_categories['free_throw_rate']] += (row.Lfta / row.Lftm) if row.Lftm > 0 else 0
-        stats[row.Season][wteam_id][lteam_id][stat_categories['turnover_rate']] += (row.Wto / wposs)
-        stats[row.Season][lteam_id][wteam_id][stat_categories['turnover_rate']] += (row.Lto / lposs)
-        stats[row.Season][wteam_id][lteam_id][stat_categories['assist_rate']] += (row.Wast / row.Wfgm)
-        stats[row.Season][lteam_id][wteam_id][stat_categories['assist_rate']] += (row.Last / row.Lfgm)
-        stats[row.Season][wteam_id][lteam_id][stat_categories['block_rate']] += (row.Wblk / row.Lfga)
-        stats[row.Season][lteam_id][wteam_id][stat_categories['block_rate']] += (row.Lblk / row.Wfga)
-        stats[row.Season][wteam_id][lteam_id][stat_categories['steal_rate']] += (row.Wstl / lposs)
-        stats[row.Season][lteam_id][wteam_id][stat_categories['steal_rate']] += (row.Lstl / wposs)
-        stats[row.Season][wteam_id][lteam_id][stat_categories['score_rate']] += (row.Wscore / wposs)
-        stats[row.Season][lteam_id][wteam_id][stat_categories['score_rate']] += (row.Lscore / lposs)
-        stats[row.Season][wteam_id][lteam_id][stat_categories['foul_rate']] += (row.Wpf / lposs)
-        stats[row.Season][lteam_id][wteam_id][stat_categories['foul_rate']] += (row.Lpf / wposs)
+        if row.Daynum < TOURNEY_START_DAY:
+            wteam_id = teams[row.Season][row.Wteam]
+            lteam_id = teams[row.Season][row.Lteam]
+            wposs = row.Wfga - row.Wor + row.Wto + .475 * row.Wfta
+            lposs = row.Lfga - row.Lor + row.Lto + .475 * row.Lfta
+            stats[row.Season][wteam_id][lteam_id][stat_categories['eff_field_goal_percent']] += ((row.Wfgm + .5 * row.Wfgm3) / row.Wfga)
+            stats[row.Season][lteam_id][wteam_id][stat_categories['eff_field_goal_percent']] += ((row.Lfgm + .5 * row.Lfgm3) / row.Lfga)
+            stats[row.Season][wteam_id][lteam_id][stat_categories['true_shooting']] += (.5 * row.Wscore / (row.Wfga + 0.475 * row.Wfta))
+            stats[row.Season][lteam_id][wteam_id][stat_categories['true_shooting']] += (.5 * row.Lscore / (row.Lfga + 0.475 * row.Lfta))
+            stats[row.Season][wteam_id][lteam_id][stat_categories['rebound_rate']] += row.Wor / (row.Wor + row.Ldr)
+            stats[row.Season][lteam_id][wteam_id][stat_categories['rebound_rate']] += row.Lor / (row.Lor + row.Wdr)
+            stats[row.Season][wteam_id][lteam_id][stat_categories['free_throw_rate']] += (row.Wfta / row.Wftm) if row.Wftm > 0 else 0
+            stats[row.Season][lteam_id][wteam_id][stat_categories['free_throw_rate']] += (row.Lfta / row.Lftm) if row.Lftm > 0 else 0
+            stats[row.Season][wteam_id][lteam_id][stat_categories['turnover_rate']] += (row.Wto / wposs)
+            stats[row.Season][lteam_id][wteam_id][stat_categories['turnover_rate']] += (row.Lto / lposs)
+            stats[row.Season][wteam_id][lteam_id][stat_categories['assist_rate']] += (row.Wast / row.Wfgm)
+            stats[row.Season][lteam_id][wteam_id][stat_categories['assist_rate']] += (row.Last / row.Lfgm)
+            stats[row.Season][wteam_id][lteam_id][stat_categories['block_rate']] += (row.Wblk / row.Lfga)
+            stats[row.Season][lteam_id][wteam_id][stat_categories['block_rate']] += (row.Lblk / row.Wfga)
+            stats[row.Season][wteam_id][lteam_id][stat_categories['steal_rate']] += (row.Wstl / lposs)
+            stats[row.Season][lteam_id][wteam_id][stat_categories['steal_rate']] += (row.Lstl / wposs)
+            stats[row.Season][wteam_id][lteam_id][stat_categories['score_rate']] += (row.Wscore / wposs)
+            stats[row.Season][lteam_id][wteam_id][stat_categories['score_rate']] += (row.Lscore / lposs)
+            stats[row.Season][wteam_id][lteam_id][stat_categories['foul_rate']] += (row.Wpf / lposs)
+            stats[row.Season][lteam_id][wteam_id][stat_categories['foul_rate']] += (row.Lpf / wposs)
         if row.Daynum >= first_day:
             if row.Daynum > day:
                 adj_stats = rating_F(stats)
@@ -299,62 +279,63 @@ def statistics(X, X_pred, stat_F):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     compiled_stats = []
     for row in X.itertuples(index=False):
-        stats[row.Season][row.Wteam]['score'].append(row.Wscore)
-        stats[row.Season][row.Wteam]['score-against'].append(row.Lscore)
-        stats[row.Season][row.Lteam]['score'].append(row.Lscore)
-        stats[row.Season][row.Lteam]['score-against'].append(row.Wscore)
-        stats[row.Season][row.Wteam]['fgm'].append(row.Wfgm)
-        stats[row.Season][row.Wteam]['fgm-against'].append(row.Lfgm)
-        stats[row.Season][row.Lteam]['fgm'].append(row.Lfgm)
-        stats[row.Season][row.Lteam]['fgm-against'].append(row.Wfgm)
-        stats[row.Season][row.Wteam]['fga'].append(row.Wfga)
-        stats[row.Season][row.Wteam]['fga-against'].append(row.Lfga)
-        stats[row.Season][row.Lteam]['fga'].append(row.Lfga)
-        stats[row.Season][row.Lteam]['fga-against'].append(row.Wfga)
-        stats[row.Season][row.Wteam]['fgm3'].append(row.Wfgm3)
-        stats[row.Season][row.Wteam]['fgm3-against'].append(row.Lfgm3)
-        stats[row.Season][row.Lteam]['fgm3'].append(row.Lfgm3)
-        stats[row.Season][row.Lteam]['fgm3-against'].append(row.Wfgm3)
-        stats[row.Season][row.Wteam]['fga3'].append(row.Wfga3)
-        stats[row.Season][row.Wteam]['fga3-against'].append(row.Lfga3)
-        stats[row.Season][row.Lteam]['fga3'].append(row.Lfga3)
-        stats[row.Season][row.Lteam]['fga3-against'].append(row.Wfga3)
-        stats[row.Season][row.Wteam]['ftm'].append(row.Wftm)
-        stats[row.Season][row.Wteam]['ftm-against'].append(row.Lftm)
-        stats[row.Season][row.Lteam]['ftm'].append(row.Lftm)
-        stats[row.Season][row.Lteam]['ftm-against'].append(row.Wftm)
-        stats[row.Season][row.Wteam]['fta'].append(row.Wfta)
-        stats[row.Season][row.Wteam]['fta-against'].append(row.Lfta)
-        stats[row.Season][row.Lteam]['fta'].append(row.Lfta)
-        stats[row.Season][row.Lteam]['fta-against'].append(row.Wfta)
-        stats[row.Season][row.Wteam]['or'].append(row.Wor)
-        stats[row.Season][row.Wteam]['or-against'].append(row.Lor)
-        stats[row.Season][row.Lteam]['or'].append(row.Lor)
-        stats[row.Season][row.Lteam]['or-against'].append(row.Wor)
-        stats[row.Season][row.Wteam]['dr'].append(row.Wdr)
-        stats[row.Season][row.Wteam]['dr-against'].append(row.Ldr)
-        stats[row.Season][row.Lteam]['dr'].append(row.Ldr)
-        stats[row.Season][row.Lteam]['dr-against'].append(row.Wdr)
-        stats[row.Season][row.Wteam]['ast'].append(row.Wast)
-        stats[row.Season][row.Wteam]['ast-against'].append(row.Last)
-        stats[row.Season][row.Lteam]['ast'].append(row.Last)
-        stats[row.Season][row.Lteam]['ast-against'].append(row.Wast)
-        stats[row.Season][row.Wteam]['to'].append(row.Wto)
-        stats[row.Season][row.Wteam]['to-against'].append(row.Lto)
-        stats[row.Season][row.Lteam]['to'].append(row.Lto)
-        stats[row.Season][row.Lteam]['to-against'].append(row.Wto)
-        stats[row.Season][row.Wteam]['stl'].append(row.Wstl)
-        stats[row.Season][row.Wteam]['stl-against'].append(row.Lstl)
-        stats[row.Season][row.Lteam]['stl'].append(row.Lstl)
-        stats[row.Season][row.Lteam]['stl-against'].append(row.Wstl)
-        stats[row.Season][row.Wteam]['blk'].append(row.Wblk)
-        stats[row.Season][row.Wteam]['blk-against'].append(row.Lblk)
-        stats[row.Season][row.Lteam]['blk'].append(row.Lblk)
-        stats[row.Season][row.Lteam]['blk-against'].append(row.Wblk)
-        stats[row.Season][row.Wteam]['pf'].append(row.Wpf)
-        stats[row.Season][row.Wteam]['pf-against'].append(row.Lpf)
-        stats[row.Season][row.Lteam]['pf'].append(row.Lpf)
-        stats[row.Season][row.Lteam]['pf-against'].append(row.Wpf)
+        if row.Daynum < TOURNEY_START_DAY:
+            stats[row.Season][row.Wteam]['score'].append(row.Wscore)
+            stats[row.Season][row.Wteam]['score-against'].append(row.Lscore)
+            stats[row.Season][row.Lteam]['score'].append(row.Lscore)
+            stats[row.Season][row.Lteam]['score-against'].append(row.Wscore)
+            stats[row.Season][row.Wteam]['fgm'].append(row.Wfgm)
+            stats[row.Season][row.Wteam]['fgm-against'].append(row.Lfgm)
+            stats[row.Season][row.Lteam]['fgm'].append(row.Lfgm)
+            stats[row.Season][row.Lteam]['fgm-against'].append(row.Wfgm)
+            stats[row.Season][row.Wteam]['fga'].append(row.Wfga)
+            stats[row.Season][row.Wteam]['fga-against'].append(row.Lfga)
+            stats[row.Season][row.Lteam]['fga'].append(row.Lfga)
+            stats[row.Season][row.Lteam]['fga-against'].append(row.Wfga)
+            stats[row.Season][row.Wteam]['fgm3'].append(row.Wfgm3)
+            stats[row.Season][row.Wteam]['fgm3-against'].append(row.Lfgm3)
+            stats[row.Season][row.Lteam]['fgm3'].append(row.Lfgm3)
+            stats[row.Season][row.Lteam]['fgm3-against'].append(row.Wfgm3)
+            stats[row.Season][row.Wteam]['fga3'].append(row.Wfga3)
+            stats[row.Season][row.Wteam]['fga3-against'].append(row.Lfga3)
+            stats[row.Season][row.Lteam]['fga3'].append(row.Lfga3)
+            stats[row.Season][row.Lteam]['fga3-against'].append(row.Wfga3)
+            stats[row.Season][row.Wteam]['ftm'].append(row.Wftm)
+            stats[row.Season][row.Wteam]['ftm-against'].append(row.Lftm)
+            stats[row.Season][row.Lteam]['ftm'].append(row.Lftm)
+            stats[row.Season][row.Lteam]['ftm-against'].append(row.Wftm)
+            stats[row.Season][row.Wteam]['fta'].append(row.Wfta)
+            stats[row.Season][row.Wteam]['fta-against'].append(row.Lfta)
+            stats[row.Season][row.Lteam]['fta'].append(row.Lfta)
+            stats[row.Season][row.Lteam]['fta-against'].append(row.Wfta)
+            stats[row.Season][row.Wteam]['or'].append(row.Wor)
+            stats[row.Season][row.Wteam]['or-against'].append(row.Lor)
+            stats[row.Season][row.Lteam]['or'].append(row.Lor)
+            stats[row.Season][row.Lteam]['or-against'].append(row.Wor)
+            stats[row.Season][row.Wteam]['dr'].append(row.Wdr)
+            stats[row.Season][row.Wteam]['dr-against'].append(row.Ldr)
+            stats[row.Season][row.Lteam]['dr'].append(row.Ldr)
+            stats[row.Season][row.Lteam]['dr-against'].append(row.Wdr)
+            stats[row.Season][row.Wteam]['ast'].append(row.Wast)
+            stats[row.Season][row.Wteam]['ast-against'].append(row.Last)
+            stats[row.Season][row.Lteam]['ast'].append(row.Last)
+            stats[row.Season][row.Lteam]['ast-against'].append(row.Wast)
+            stats[row.Season][row.Wteam]['to'].append(row.Wto)
+            stats[row.Season][row.Wteam]['to-against'].append(row.Lto)
+            stats[row.Season][row.Lteam]['to'].append(row.Lto)
+            stats[row.Season][row.Lteam]['to-against'].append(row.Wto)
+            stats[row.Season][row.Wteam]['stl'].append(row.Wstl)
+            stats[row.Season][row.Wteam]['stl-against'].append(row.Lstl)
+            stats[row.Season][row.Lteam]['stl'].append(row.Lstl)
+            stats[row.Season][row.Lteam]['stl-against'].append(row.Wstl)
+            stats[row.Season][row.Wteam]['blk'].append(row.Wblk)
+            stats[row.Season][row.Wteam]['blk-against'].append(row.Lblk)
+            stats[row.Season][row.Lteam]['blk'].append(row.Lblk)
+            stats[row.Season][row.Lteam]['blk-against'].append(row.Wblk)
+            stats[row.Season][row.Wteam]['pf'].append(row.Wpf)
+            stats[row.Season][row.Wteam]['pf-against'].append(row.Lpf)
+            stats[row.Season][row.Lteam]['pf'].append(row.Lpf)
+            stats[row.Season][row.Lteam]['pf-against'].append(row.Wpf)
         wstats = stat_F(stats[row.Season][row.Wteam])
         lstats = stat_F(stats[row.Season][row.Lteam])
         if not wstats:
@@ -420,4 +401,4 @@ def assemble_features(pre_X, X, X_pred):
     X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(descript_stats_predict, columns=descript_stat_cols)], axis=1)
     X_pred = pandas.concat([X_pred.reset_index(drop=True), pandas.DataFrame(derived_stats_predict, columns=derive_stat_cols)], axis=1)
 
-    return X, X_pred.values.astype('float64')
+    return X, X_pred

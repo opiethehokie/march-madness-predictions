@@ -15,6 +15,8 @@
 
 import cProfile
 
+from scipy.stats import norm
+
 
 # annotate a function with @profile to see where it's spending the most time
 def profile(func):
@@ -42,3 +44,8 @@ def print_models(func):
         print('Best accuracy: %.2f' % model.best_score_)
         return model
     return printed_func
+
+# https://www.pro-football-reference.com/about/win_prob.htm
+def mov_to_win_percent(u, m=11):
+    u = u - .3 # avg mov is -.3
+    return 1 - norm.cdf(0.5, loc=u, scale=m) + .5 * (norm.cdf(0.5, loc=u, scale=m) - norm.cdf(-0.5, loc=u, scale=m))
