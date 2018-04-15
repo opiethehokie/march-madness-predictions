@@ -25,7 +25,7 @@ from sklearn.metrics import log_loss
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from ml.predictions import train_model, custom_cv
+from ml.predictions import train_regressor, custom_cv
 from ml.transformers import ColumnSelector
 from ml.util import mov_to_win_percent
 from ml.wrangling import custom_train_test_split, modified_rpi
@@ -58,7 +58,7 @@ def test_model():
     assert isinstance(y_train, numpy.ndarray)
     assert isinstance(y_test, numpy.ndarray)
 
-    model = train_model(X_train, y_train, regressors=[make_pipeline(ColumnSelector(cols=[4, 5]), StandardScaler(), LinearRegression())])
+    model = train_regressor(X_train, y_train, regressors=[make_pipeline(ColumnSelector(cols=[4, 5]), StandardScaler(), LinearRegression())])
     y_predict = model.predict(X_test)
     y_predict_probas = [mov_to_win_percent(yi) for yi in y_predict]
     assert log_loss(y_test, y_predict_probas) <= 0.69
@@ -82,7 +82,7 @@ def test_for_leakage():
     rpis1, _ = modified_rpi(games1, pandas.DataFrame([]))
     games1 = pandas.concat([games1.reset_index(drop=True), pandas.DataFrame(rpis1, columns=['rpi1', 'rpi2'])], axis=1)
     X_train1, _, y_train1, _ = custom_train_test_split(games1, year)
-    model1 = train_model(X_train1, y_train1, regressors=[make_pipeline(ColumnSelector(cols=[4, 5]), StandardScaler(), LinearRegression())])
+    model1 = train_regressor(X_train1, y_train1, regressors=[make_pipeline(ColumnSelector(cols=[4, 5]), StandardScaler(), LinearRegression())])
 
     data2 = pandas.concat([pandas.read_csv('data/regular_season_detailed_results_2018.csv'),
                            pandas.read_csv('data/tourney_detailed_results_2016.csv')]).sort_values(by=['Daynum', 'Wteam', 'Lteam'])
@@ -92,7 +92,7 @@ def test_for_leakage():
     rpis2, _ = modified_rpi(games2, pandas.DataFrame([]))
     games2 = pandas.concat([games2.reset_index(drop=True), pandas.DataFrame(rpis2, columns=['rpi1', 'rpi2'])], axis=1)
     X_train2, _, y_train2, _ = custom_train_test_split(games2, year)
-    model2 = train_model(X_train2, y_train2, regressors=[make_pipeline(ColumnSelector(cols=[4, 5]), StandardScaler(), LinearRegression())])
+    model2 = train_regressor(X_train2, y_train2, regressors=[make_pipeline(ColumnSelector(cols=[4, 5]), StandardScaler(), LinearRegression())])
 
     assert X_train1.shape == X_train2.shape
     assert numpy.array_equal(X_train1, X_train2)

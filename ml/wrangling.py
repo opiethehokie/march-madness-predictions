@@ -116,8 +116,6 @@ def describe_stats(results):
         described.append(numpy.std(results[stat]))
         described.append(numpy.median(results[stat]))
         described.append(numpy.mean(results[stat]))
-        #described.append(scipy.stats.kurtosis(results[stat], fisher=False))
-        #described.append(scipy.stats.skew(results[stat]))
     return described
 
 def _rpi(season_results, team, weights):
@@ -145,7 +143,6 @@ def _opponents_opponents_win_percent(season_results, opponents):
 
 def modified_rpi(X, X_pred, weights=(.15, .15, .7)):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
-    fstats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     rpis = []
     for row in X.itertuples(index=False):
         if row.Daynum < TOURNEY_START_DAY:
@@ -153,10 +150,6 @@ def modified_rpi(X, X_pred, weights=(.15, .15, .7)):
             stats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
             stats[row.Season][row.Wteam]['results'].append(1)
             stats[row.Season][row.Lteam]['results'].append(0)
-        fstats[row.Season][row.Wteam]['opponents'].append(row.Lteam)
-        fstats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
-        fstats[row.Season][row.Wteam]['results'].append(1)
-        fstats[row.Season][row.Lteam]['results'].append(0)
         wrpi = _rpi(stats[row.Season], row.Wteam, weights)
         lrpi = _rpi(stats[row.Season], row.Lteam, weights)
         if row.Wteam < row.Lteam:
@@ -165,12 +158,9 @@ def modified_rpi(X, X_pred, weights=(.15, .15, .7)):
             rpis.append([lrpi, wrpi])
     rpis_pred = []
     for row in X_pred.itertuples(index=False):
-        wrpi = _rpi(stats[row.Season], row.Wteam, weights)
-        lrpi = _rpi(stats[row.Season], row.Lteam, weights)
-        if row.Wteam < row.Lteam:
-            rpis_pred.append([wrpi, lrpi])
-        else:
-            rpis_pred.append([lrpi, wrpi])
+        arpi = _rpi(stats[row.Season], row.Wteam, weights)
+        brpi = _rpi(stats[row.Season], row.Lteam, weights)
+        rpis_pred.append([arpi, brpi])
     return numpy.array(rpis), numpy.array(rpis_pred)
 
 def _pythagorean_expectation(results, exponent):
@@ -197,12 +187,9 @@ def pythagorean_expectation(X, X_pred, exponent=10.25):
             pythags.append([lpythag, wpythag])
     pythags_pred = []
     for row in X_pred.itertuples(index=False):
-        wpythag = _pythagorean_expectation(stats[row.Season][row.Wteam], exponent)
-        lpythag = _pythagorean_expectation(stats[row.Season][row.Lteam], exponent)
-        if row.Wteam < row.Lteam:
-            pythags_pred.append([wpythag, lpythag])
-        else:
-            pythags_pred.append([lpythag, wpythag])
+        apythag = _pythagorean_expectation(stats[row.Season][row.Wteam], exponent)
+        bpythag = _pythagorean_expectation(stats[row.Season][row.Lteam], exponent)
+        pythags_pred.append([apythag, bpythag])
     return numpy.array(pythags), numpy.array(pythags_pred)
 
 def _all_teams(data):
@@ -266,12 +253,9 @@ def advanced_statistic_ratings(X, X_pred, rating_F, preseason_games=None):
     ratings_pred = []
     for row in X_pred.itertuples(index=False):
         team_ids = teams[row.Season]
-        wrating = adj_stats[row.Season][team_ids[row.Wteam]]
-        lrating = adj_stats[row.Season][team_ids[row.Lteam]]
-        if row.Wteam < row.Lteam:
-            ratings_pred.append(numpy.hstack((wrating, lrating)))
-        else:
-            ratings_pred.append(numpy.hstack((lrating, wrating)))
+        arating = adj_stats[row.Season][team_ids[row.Wteam]]
+        brating = adj_stats[row.Season][team_ids[row.Lteam]]
+        ratings_pred.append(numpy.hstack((arating, brating)))
     return numpy.array(ratings), numpy.array(ratings_pred)
 
 # http://netprophetblog.blogspot.com/2012/02/continued-slow-pursuit-of-statistical.html
@@ -348,12 +332,9 @@ def statistics(X, X_pred, stat_F):
             compiled_stats.append(numpy.hstack((lstats, wstats)))
     compiled_stats_pred = []
     for row in X_pred.itertuples(index=False):
-        wstats = stat_F(stats[row.Season][row.Wteam])
-        lstats = stat_F(stats[row.Season][row.Lteam])
-        if row.Wteam < row.Lteam:
-            compiled_stats_pred.append(numpy.hstack((wstats, lstats)))
-        else:
-            compiled_stats_pred.append(numpy.hstack((lstats, wstats)))
+        astats = stat_F(stats[row.Season][row.Wteam])
+        bstats = stat_F(stats[row.Season][row.Lteam])
+        compiled_stats_pred.append(numpy.hstack((astats, bstats)))
     return numpy.array(compiled_stats), numpy.array(compiled_stats_pred)
 
 def assemble_features(pre_X, X, X_pred):

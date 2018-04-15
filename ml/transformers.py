@@ -32,6 +32,8 @@ class ColumnSelector(BaseEstimator, TransformerMixin):
         X = pandas.DataFrame(X)
         if not self.cols:
             return X.values
+        if self.cols[-1] - 1 > X.shape[1]:
+            return X.values
         return X[self.cols].values
 
 class DebugFeatureProperties(BaseEstimator, TransformerMixin):
@@ -39,7 +41,7 @@ class DebugFeatureProperties(BaseEstimator, TransformerMixin):
     def fit(self, X, _y=None):
         df = pandas.DataFrame(X)
         print(df.shape)
-        print(df.head(3))
+        print(df.tail(3))
         #print(df.describe())
         #print(skew(df))
         #print(df.cov())

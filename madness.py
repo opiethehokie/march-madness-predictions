@@ -27,7 +27,7 @@ from sklearn.metrics import log_loss
 
 import yamlordereddictloader
 
-from ml.predictions import train_model
+from ml.predictions import train_regressor
 from ml.simulations import simulate_tourney
 from ml.util import mov_to_win_percent
 from ml.wrangling import (custom_train_test_split, filter_outlier_games, adjust_overtime_games,
@@ -124,10 +124,10 @@ def add_features(pre_data, data, post_data):
         features, features_predict = assemble_features(pre_data, data, post_data)
         features.to_csv(FEATURE_CACHE_FILE)
         features_predict.to_csv(PREDICT_CACHE_FILE)
-        assert features.shape[1] == 34 + 1108
-        assert features_predict.shape == (2278, 4 + 1108)
     features = pandas.read_csv(FEATURE_CACHE_FILE, index_col=0)
     features_predict = pandas.read_csv(PREDICT_CACHE_FILE, index_col=0)
+    assert features.shape[1] == 34 + 1108
+    assert features_predict.shape == (2278, 4 + 1108)
     return features, features_predict.values.astype('float64')
 
 
@@ -138,7 +138,7 @@ if __name__ == '__main__':
     SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
     TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
 
-    start_year = predict_year - 7
+    start_year = predict_year - 9
     start_day = 5
 
     predict_matchups, postseason_games = possible_tourney_matchups()
@@ -152,22 +152,21 @@ if __name__ == '__main__':
     games, X_predict = add_features(preseason_games, games, postseason_games)
 
     X_train, X_test, y_train, y_test = custom_train_test_split(games, predict_year)
-    model = train_model(X_train, y_train)
+    model = train_regressor(X_train, y_train)
 
     if X_test.size > 0:
         y_predict = model.predict(X_test)
         y_predict_probas = [mov_to_win_percent(yi, m) for yi in y_predict]
-        for i, yi in enumerate(y_predict_probas):
-            print(yi, y_test[i], log_loss([y_test[i]], [yi], labels=[0, 1]))
         print('Average log loss is %f' % log_loss(y_test, y_predict_probas))
 
     y_predict = model.predict(X_predict)
     y_predict_probas = [mov_to_win_percent(yi, m) for yi in y_predict]
+
     write_predictions(predict_matchups, y_predict_probas)
 
     # post-processing for Kaggle competition (two submissions means we can always get championship game correct)
-    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 0), '0')
-    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict, 1), '1')
+    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict_probas, 0), '0')
+    write_predictions(predict_matchups, differentiate_final_predictions(predict_matchups, y_predict_probas, 1), '1')
 
     # predict actual tournament bracket for cash money
     if predict_year >= 2015:
