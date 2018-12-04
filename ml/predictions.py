@@ -36,6 +36,12 @@ from ml.transformers import ColumnSelector, DiffTransformer
 from ml.wrangling import TOURNEY_START_DAY
 from ml.util import print_models
 
+#TODO include below until https://github.com/scikit-optimize/scikit-optimize/issues/718 is resolved
+#pylint: disable=function-redefined
+class BayesSearchCV(BayesSearchCV):
+    def _run_search(self, _):
+        raise BaseException('Use newer skopt')
+
 
 RPI_START = 4
 RPI_END = 9

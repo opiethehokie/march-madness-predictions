@@ -18,10 +18,13 @@ from collections import OrderedDict
 
 def simulate_tourney(teams_ids, predictions, tourney_format):
 
-    def pairwise(it):
-        it = iter(it)
-        while True:
-            yield next(it), next(it)
+    def pairwise(data):
+        it = iter(data)
+        try:
+            while True:
+                yield next(it), next(it)
+        except StopIteration:
+            return
 
     def play_game(teama, seeda, teamb, seedb):
         if teams_ids[teama] < teams_ids[teamb]:

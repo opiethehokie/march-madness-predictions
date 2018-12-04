@@ -16,7 +16,7 @@ Delete `data/*cache.csv` files when switching years.
 
 Probabilities for every possible tournament game are written to CSV files in the results directory. These are then used to simulate the tournament and the results are printed to the console to be used for filling out a traditional bracket.
 
-A nice way to check your results for the most recent tournament is [https://www.marksmath.org/visualization/kaggle_brackets/]() (not created by me).
+A nice way to check your results for the most recent tournament is https://www.marksmath.org/visualization/kaggle_brackets/ (not created by me).
 
 ## Development
 
