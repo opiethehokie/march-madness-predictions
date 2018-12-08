@@ -4,7 +4,7 @@ https://www.kaggle.com/c/mens-machine-learning-competition-2018
 
 ## Usage
 
-Create Conda environment (tested with 64-bit Anaconda Python 3.6 on Windows):
+Create Conda environment (with 64-bit Anaconda Python 3.6 on Ubuntu Linux):
 
 `conda env create -f environment.yml`
 
