@@ -1,0 +1,52 @@
+CODE:
+
+- really good comments
+- sub H2O4GPU for final speed?
+
+PREPROCESSING:
+
+- do for all seasons once and save in sqlite (should be easy to add new features)
+- outlier removal with EllipticEnvelope, LocalOutlierFactor, scipy Winsorize
+- oversample neutral site games and/or synthesize games by adjusting stats
+* train/dev/test where dev/test include multiple years tourney games and train includes some
+
+FEATURES:
+
+- fourier transform
+- kurtosis and skew
+- discretization / binning (KBins or Quantile transformer)
+- rank transform (scipy.stats.rankdata)
+- Power transformer instead of my own
+- better time series (avg, moving avg, exponential smoothing, Holt's linear trend, ... dropping high and low)
+- momentum as a streak
+- revisit diff transformer, it should be useful
+- kalman filter
+- Elo rating
+- just points for my ratings to reduce complexity
+
+ENSEMBLE:
+
+- neural network with all features
+- regression with transformer features
+- generate model with auto-sklearn
+- voting ensemble of all 3
+
+ANALYSIS:
+
+- significance test for telling if a model is better than another
+- confidence intervals for final model
+
+
+
+NOTES:
+
+bias is trainging error, variance is additional error on dev/test sets
+basketball naturally has high bias (underfitting)
+
+if test is worse than dev then we've overfit and need more data
+
+test set is never used to make decisions, only track progress
+
+look at dev set mistakes to get new ideas
+
+ideally metric is log loss but for regression probably want adjusted R^2

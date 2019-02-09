@@ -130,5 +130,3 @@ dependencies:
     - urllib3==1.24.1
     - xgboost==0.81
     - yamlordereddictloader==0.4.0
-prefix: /home/mtpeters/anaconda3/envs/madness
-
