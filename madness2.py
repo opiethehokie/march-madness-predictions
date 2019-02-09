@@ -43,7 +43,7 @@ if __name__ == '__main__':
     SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
     TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
 
-    start_year = predict_year - 5
+    start_year = predict_year - 4
     start_day = 30
 
     predict_matchups, future_games = possible_tourney_matchups(SAMPLE_SUBMISSION_FILE)
@@ -52,10 +52,10 @@ if __name__ == '__main__':
     games = adjust_overtime_games(games)
     games = filter_outlier_games(games)
     games = oversample_neutral_site_games(games)
-    games = filter_out_of_window_games(games, start_year, start_day, predict_year)
-    games = pd.concat([games, future_games])
+    games = pd.concat([games, future_games], axis=0, sort=False).fillna(0)
 
     data = add_features(games)
+    data = filter_out_of_window_games(data, start_year, start_day, predict_year)
 
     X_train, X_test, X_predict, y_train, y_test = custom_train_test_split(data, predict_year)
 
@@ -67,16 +67,18 @@ if __name__ == '__main__':
         result_probas = [mov_to_win_percent(yi, m) for yi in results]
         print('Average log loss is %f' % log_loss(y_test, result_probas))
 
-    predictions = model.predict(X_predict)
-    prediction_probas = [mov_to_win_percent(yi, m) for yi in predictions]
+    #predictions = model.predict(X_predict)
+    #prediction_probas = [mov_to_win_percent(yi, m) for yi in predictions]
 
-    #write_predictions(predict_matchups, y_predict_probas, SUBMISSION_FILE)
+    #write_predictions(predict_matchups, prediction_probas, SUBMISSION_FILE)
 
     # post-processing for Kaggle competition (two submissions means we can always get championship game correct)
     #slots = championship_pairings(SLOTS_FILE)
     #seeds = team_seed_mapping(SEEDS_FILE)
-    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, y_predict_probas, 0), '0')
-    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, y_predict_probas, 1), '1')
+    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 0), 
+    #                  SUBMISSION_FILE.replace('.csv', '0.csv'))
+    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 1), 
+    #                  SUBMISSION_FILE.replace('.csv', '1.csv'))
 
     # predict actual tournament bracket for cash money
     #if predict_year >= 2015 and predict_year <= 2018:

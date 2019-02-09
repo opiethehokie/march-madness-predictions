@@ -49,7 +49,7 @@ def print_models(func):
 @print_models
 def manual_regression_model(X, y):
     grid = {
-        'ridge__alpha': Real(1e+0, 1e+2, prior='log-uniform')
+        'alpha': Real(1e+0, 1e+2, prior='log-uniform')
     }
     iters = len(grid.keys()) * 5 if len(grid.keys()) > 1 else 1
     base_model = Ridge(random_state=random_state, alpha=1)

@@ -8,7 +8,6 @@ __pycache__
 results/out.txt
 results/submission*.csv
 results/*.png
-data/feature_cache.csv
-data/predict_cache.csv
+data/*.db
 .vscode
 htmlcov
