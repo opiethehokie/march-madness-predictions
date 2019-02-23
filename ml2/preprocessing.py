@@ -79,7 +79,7 @@ def filter_out_of_window_games(data, syear, sday, eyear):
 
 def oversample_neutral_site_games(data, factor=2):
     data = data.copy()
-    neutral_site_games = data[(data.Wloc == 'N') & (data.Daynum < TOURNEY_START_DAY)]
+    neutral_site_games = data[(data.Wloc == 'N') & (data.Daynum < TOURNEY_START_DAY)] #TODO tourney games too?
     return data.append([neutral_site_games]*factor, ignore_index=True)
 
 def custom_train_test_split(data, predict_year):
@@ -87,10 +87,10 @@ def custom_train_test_split(data, predict_year):
     test_games = data[(data.Season == predict_year) & (data.Daynum >= TOURNEY_START_DAY) & (data.Daynum != 999)]
     predict_games = data[(data.Season == predict_year) & (data.Daynum == 999)]
     train_results = train_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(_mov, axis=1)
-    test_results = test_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(_win, axis=1)
-    not_needed_cols = ['Wscore', 'Lscore', 'Wloc', 'Numot', 'Wfgm', 'Wfga', 'Wfgm3', 'Wfga3', 'Wftm', 'Wfta',
-                       'Wor', 'Wdr', 'Wast', 'Wto', 'Wstl', 'Wblk', 'Wpf', 'Lfgm', 'Lfga', 'Lfgm3', 'Lfga3', 'Lftm',
-                       'Lfta', 'Lor', 'Ldr', 'Last', 'Lto', 'Lstl', 'Lblk', 'Lpf']
+    test_results = test_games[['Wteam', 'Lteam']].apply(_win, axis=1)
+    not_needed_cols = ['Wteam', 'Wscore', 'Lteam', 'Lscore', 'Wloc', 'Numot',
+                       'Wfgm', 'Wfga', 'Wfgm3', 'Wfga3', 'Wftm', 'Wfta', 'Wor', 'Wdr', 'Wast', 'Wto', 'Wstl', 'Wblk', 'Wpf',
+                       'Lfgm', 'Lfga', 'Lfgm3', 'Lfga3', 'Lftm', 'Lfta', 'Lor', 'Ldr', 'Last', 'Lto', 'Lstl', 'Lblk', 'Lpf']
     train_games = train_games.drop(columns=not_needed_cols)
     test_games = test_games.drop(columns=not_needed_cols)
     predict_games = predict_games.drop(columns=not_needed_cols)
@@ -128,9 +128,10 @@ def _construct_sos(data, bust_cache=False):
     rpi2 = pd.DataFrame(modified_rpi(data, weights=(.25, .25, .5)), columns=['rpi_2a', 'rpi_2b'])
     rpi3 = pd.DataFrame(modified_rpi(data, weights=(.25, .5, .25)), columns=['rpi_3a', 'rpi_3b'])
     sos = pd.concat([rpi1, rpi2, rpi3], axis=1)
+    assert sos.all(axis=None)
     write_processed_data(sos, 'sos')
     return sos
 
 def add_features(data):
     sos = _construct_sos(data)
-    return pd.concat([data.reset_index(drop=True), sos], axis=1)
+    return pd.concat([data.reset_index(drop=True), sos.reset_index(drop=True)], axis=1)

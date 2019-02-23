@@ -52,7 +52,7 @@ if __name__ == '__main__':
     games = adjust_overtime_games(games)
     games = filter_outlier_games(games)
     games = oversample_neutral_site_games(games)
-    games = pd.concat([games, future_games], axis=0, sort=False).fillna(0)
+    games = pd.concat([games, future_games], axis=0, sort=False, ignore_index=True).fillna(0)
 
     data = add_features(games)
     data = filter_out_of_window_games(data, start_year, start_day, predict_year)

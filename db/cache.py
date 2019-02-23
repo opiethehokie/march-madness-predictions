@@ -20,7 +20,7 @@ import pandas as pd
 
 
 def read_processed_data(name):
-    return pd.read_sql('select * from %s;' % name, sqlite3.connect(_db_name(name)))
+    return pd.read_sql('select * from %s;' % name, sqlite3.connect(_db_name(name)), index_col='index')
 
 def write_processed_data(data, name):
     data.to_sql(name, sqlite3.connect(_db_name(name)), if_exists='replace')
