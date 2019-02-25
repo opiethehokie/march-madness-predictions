@@ -1,14 +1,6 @@
-CODE:
-
-- really good comments
-- sub H2O4GPU for final speed?
-
 PREPROCESSING:
 
-- do for all seasons once and save in sqlite (should be easy to add new features)
-- outlier removal with EllipticEnvelope, LocalOutlierFactor, scipy Winsorize
-- oversample neutral site games and/or synthesize games by adjusting stats
-* train/dev/test where dev/test include multiple years tourney games and train includes some
+- synthesize games by adjusting stats
 
 FEATURES:
 
@@ -26,27 +18,10 @@ FEATURES:
 
 ENSEMBLE:
 
-- neural network with all features
-- regression with transformer features
-- generate model with auto-sklearn
-- voting ensemble of all 3
+- multiple runs with different seeds
+- train over multiple years to make final hyperparameter selections
 
 ANALYSIS:
 
 - significance test for telling if a model is better than another
 - confidence intervals for final model
-
-
-
-NOTES:
-
-bias is trainging error, variance is additional error on dev/test sets
-basketball naturally has high bias (underfitting)
-
-if test is worse than dev then we've overfit and need more data
-
-test set is never used to make decisions, only track progress
-
-look at dev set mistakes to get new ideas
-
-ideally metric is log loss but for regression probably want adjusted R^2

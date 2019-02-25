@@ -16,6 +16,7 @@
 from scipy.stats import norm
 
 
+# two submissions means we can always get championship game correct
 def override_final_predictions(slots, seeds, matchups, predictions, new_value):
     diff_predictions = list(predictions)
     for idx, matchup in enumerate(matchups):

@@ -15,71 +15,56 @@
 
 import sys
 
-import pandas as pd
+import numpy as np
 
 from sklearn.metrics import log_loss
 
-from db.kaggle import (read_raw_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
+from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
                        championship_pairings, possible_tourney_matchups)
-from ml2.training import manual_regression_model
-from ml2.preprocessing import (adjust_overtime_games, custom_train_test_split, filter_outlier_games, oversample_neutral_site_games,
-                               tourney_mov_std, filter_out_of_window_games, add_features)
-from ml2.postprocessing import mov_to_win_percent, override_final_predictions
+from ml2.training import manual_regression_model, deep_learning_regression_model, auto_regression_model, average_predictions
+from ml2.wrangling import (adjust_overtime_games, custom_train_test_split, filter_outlier_games, oversample_neutral_site_games,
+                           filter_out_of_window_games, extract_features, add_games, fill_missing_stats, tourney_mov_std)
+from ml2.postprocessing import override_final_predictions
 from simulations.bracket import simulate_tourney
 
 
-TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2017.csv'
-SEASON_DATA_FILE = 'data/regular_season_detailed_results_2018.csv'
-SUBMISSION_FILE = 'results/submission.csv'
-TEAMS_FILE = 'data/teams.csv'
-SEEDS_FILE = 'data/seeds_2018.csv'
-SLOTS_FILE = 'data/slots_2018.csv'
+random_state = 42
+np.random.seed(random_state)
 
 
 if __name__ == '__main__':
 
     predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2017
 
-    SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv' % predict_year
-    TOURNEY_FORMAT_FILE = 'data/tourney_format_%s.yml' % predict_year
+    start_year = 2009
+    start_day = 20
 
-    start_year = predict_year - 4
-    start_day = 30
+    predict_matchups, future_games = possible_tourney_matchups(predict_year)
 
-    predict_matchups, future_games = possible_tourney_matchups(SAMPLE_SUBMISSION_FILE)
-
-    games = read_raw_data(SEASON_DATA_FILE, TOURNEY_DATA_FILE)
+    games = game_data()
     games = adjust_overtime_games(games)
     games = filter_outlier_games(games)
     games = oversample_neutral_site_games(games)
-    games = pd.concat([games, future_games], axis=0, sort=False, ignore_index=True).fillna(0)
+    games = add_games(games, future_games)
+    games = fill_missing_stats(games)
 
-    data = add_features(games)
-    data = filter_out_of_window_games(data, start_year, start_day, predict_year)
+    games_and_features = extract_features(games)
+    games_and_features = filter_out_of_window_games(games_and_features, start_year, start_day, predict_year)
 
-    X_train, X_test, X_predict, y_train, y_test = custom_train_test_split(data, predict_year)
+    X_train, X_test, X_predict, y_train, y_test = custom_train_test_split(games_and_features, predict_year)
 
-    model = manual_regression_model(X_train, y_train)
+    model1 = manual_regression_model(X_train, y_train, random_state)
+    #model1 = deep_learning_regression_model(X_train, y_train, random_state)
+    #model1 = auto_regression_model(X_train, y_train)
 
-    m = tourney_mov_std(games)
     if X_test.size > 0:
-        results = model.predict(X_test)
-        result_probas = [mov_to_win_percent(yi, m) for yi in results]
-        print('Average log loss is %f' % log_loss(y_test, result_probas))
-
-    #predictions = model.predict(X_predict)
-    #prediction_probas = [mov_to_win_percent(yi, m) for yi in predictions]
-
-    #write_predictions(predict_matchups, prediction_probas, SUBMISSION_FILE)
-
-    # post-processing for Kaggle competition (two submissions means we can always get championship game correct)
-    #slots = championship_pairings(SLOTS_FILE)
-    #seeds = team_seed_mapping(SEEDS_FILE)
-    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 0), 
-    #                  SUBMISSION_FILE.replace('.csv', '0.csv'))
-    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 1), 
-    #                  SUBMISSION_FILE.replace('.csv', '1.csv'))
-
-    # predict actual tournament bracket for cash money
+        result_probas = average_predictions([model1], X_test, tourney_mov_std(games))
+        print('Test log loss: %f' % log_loss(y_test, result_probas))
+    #prediction_probas = average_predictions([model1], X_predict, tourney_mov_std(games))
+    #slots = championship_pairings()
+    #seeds = team_seed_mapping()
+    #write_predictions(predict_matchups, prediction_probas)
+    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 0), '-0')
+    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 1), '-1')
     #if predict_year >= 2015 and predict_year <= 2018:
-    #    simulate_tourney(team_id_mapping(TEAMS_FILE), read_predictions(SUBMISSION_FILE), predict_year)
+    #    simulate_tourney(team_id_mapping(), read_predictions(), predict_year)

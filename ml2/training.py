@@ -15,15 +15,17 @@
 
 import numpy as np
 
+from ml2.postprocessing import mov_to_win_percent
+from ml2.transformers import ColumnSelector
+
+from autosklearn.regression import AutoSklearnRegressor
 from sklearn.linear_model import Ridge
 from sklearn.metrics import r2_score, make_scorer
+from sklearn.neural_network import MLPRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, Normalizer
 from skopt import BayesSearchCV
-from skopt.space import Real
-
-from ml2.preprocessing import custom_cv
-
-random_state = 42
-np.random.seed(random_state)
+from skopt.space import Real, Categorical
 
 
 #TODO include below until https://github.com/scikit-optimize/scikit-optimize/issues/718 is resolved
@@ -41,28 +43,55 @@ def print_models(func):
             print("%0.3f +/- %0.2f %r" % (model.cv_results_[cv_keys[0]][r],
                                           model.cv_results_[cv_keys[1]][r] / 2.0,
                                           model.cv_results_[cv_keys[2]][r]))
-        print('Best parameters: %s' % model.best_params_)
-        print('Best accuracy: %.2f' % model.best_score_)
+        print('Training metric: %s' % model.scorer_)
+        print('Best training parameters: %s' % model.best_params_)
+        print('Best training accuracy: %.2f' % model.best_score_)
         return model
     return printed_func
 
 @print_models
-def manual_regression_model(X, y):
+def manual_regression_model(X, y, random_state):
     grid = {
-        'alpha': Real(1e+0, 1e+2, prior='log-uniform')
+        'regression__alpha': Real(1e+0, 1e+2, prior='log-uniform')
     }
     iters = len(grid.keys()) * 5 if len(grid.keys()) > 1 else 1
-    base_model = Ridge(random_state=random_state, alpha=1)
-    model = BayesSearchCV(base_model, grid, cv=custom_cv(X), scoring=make_scorer(r2_score), n_jobs=4,
-                          random_state=random_state, n_iter=iters)
+    model = Pipeline(steps=[#TODO feature engineering
+                            #TODO feture selection
+                            #TODO preprocessing
+                            ('regression', Ridge(random_state=random_state))
+                           ])
+    model = BayesSearchCV(model, grid, cv=10, scoring=make_scorer(r2_score), n_jobs=4, random_state=random_state, n_iter=iters)
     model.fit(X, y)
     return model
 
-def auto_regression_model():
-    pass
+def auto_regression_model(X, y):
+    model = Pipeline(steps=[('regression', AutoSklearnRegressor(resampling_strategy='cv', resampling_strategy_arguments={'folds': 5}))
+                           ])
+    model.fit(X.copy(), y.copy())
+    model.refit(X.copy(), y.copy())
+    print(model.named_steps['regression'].show_models())
+    print(model.named_steps['regression'].sprint_statistics())
+    #TODO https://scikit-learn.org/stable/modules/model_persistence.html#persistence-example
+    return model
 
-def deep_learning_regression_model():
-    pass
+@print_models
+def deep_learning_regression_model(X, y, random_state):
+    grid = {
+        'regression__hidden_layer_sizes': Categorical([(100, 50)]), #TODO
+        'regression__activation': Categorical(['relu']),
+        'regression__alpha': Real(1e-7, 1e-5, prior='log-uniform'),
+    }
+    iters = len(grid.keys()) * 5 if len(grid.keys()) > 1 else 1
+    model = Pipeline(steps=[('normalization', Normalizer()),
+                            ('regression', MLPRegressor(random_state=random_state))
+                           ])
+    model = BayesSearchCV(model, grid, cv=10, scoring=make_scorer(r2_score), n_jobs=4, random_state=random_state, n_iter=iters)
+    model.fit(X, y)
+    return model
 
-def combine_predictions():
-    pass
+def average_predictions(models, X, mov_std):
+    predictions = []
+    for model in models:
+        predictions.append(model.predict(X))
+    results = np.mean(np.array(predictions), axis=0)
+    return [mov_to_win_percent(yi, mov_std) for yi in results]

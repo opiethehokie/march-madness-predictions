@@ -85,7 +85,7 @@ def test_for_leakage():
     model1 = train_regressor(X_train1, y_train1, regressors=[make_pipeline(ColumnSelector(cols=[4, 5]), StandardScaler(), LinearRegression())])
 
     data2 = pandas.concat([pandas.read_csv('data/regular_season_detailed_results_2018.csv'),
-                           pandas.read_csv('data/tourney_detailed_results_2016.csv')]).sort_values(by=['Daynum', 'Wteam', 'Lteam'])
+                           pandas.read_csv('data/tourney_detailed_results_2017.csv')]).sort_values(by=['Daynum', 'Wteam', 'Lteam'])
     games2 = (data2.pipe(lambda df: df[df.Season >= year - 1])
               .pipe(lambda df: df[df.Season <= year])
               .pipe(lambda df: df[df.Daynum >= sday]))
