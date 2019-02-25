@@ -18,7 +18,7 @@ import pandas as pd
 import scipy as sp
 
 from ml2.aggregators import modified_rpi
-from db.cache import read_processed_data, write_processed_data, processed_data_exists
+from db.cache import read_features, write_features, features_exist
 
 
 TOURNEY_START_DAY = 134
@@ -117,13 +117,13 @@ def tourney_mov_std(data):
 # feature extraction
 
 def _construct_sos(data, bust_cache=False):
-    if processed_data_exists('sos') and not bust_cache:
-        return read_processed_data('sos')
+    if features_exist('sos') and not bust_cache:
+        return read_features('sos')
     rpi1 = pd.DataFrame(modified_rpi(data, weights=(.15, .15, .7)), columns=['rpi_1a', 'rpi_1b'])
     rpi2 = pd.DataFrame(modified_rpi(data, weights=(.25, .25, .5)), columns=['rpi_2a', 'rpi_2b'])
     rpi3 = pd.DataFrame(modified_rpi(data, weights=(.25, .5, .25)), columns=['rpi_3a', 'rpi_3b'])
     sos = pd.concat([rpi1, rpi2, rpi3], axis=1)
-    write_processed_data(sos, 'sos')
+    write_features(sos, 'sos')
     return sos
 
 def extract_features(data):

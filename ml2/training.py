@@ -14,9 +14,7 @@
 
 
 import numpy as np
-
-from ml2.postprocessing import mov_to_win_percent
-from ml2.transformers import ColumnSelector
+import pickle
 
 from autosklearn.regression import AutoSklearnRegressor
 from sklearn.linear_model import Ridge
@@ -26,6 +24,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, Normalizer
 from skopt import BayesSearchCV
 from skopt.space import Real, Categorical
+
+from db.cache import read_model, write_model, model_exists
+from ml2.postprocessing import mov_to_win_percent
 
 
 #TODO include below until https://github.com/scikit-optimize/scikit-optimize/issues/718 is resolved
@@ -65,13 +66,14 @@ def manual_regression_model(X, y, random_state):
     return model
 
 def auto_regression_model(X, y):
-    model = Pipeline(steps=[('regression', AutoSklearnRegressor(resampling_strategy='cv', resampling_strategy_arguments={'folds': 5}))
-                           ])
+    if model_exists('auto'):
+        return read_model('auto')
+    model = AutoSklearnRegressor(resampling_strategy='cv', resampling_strategy_arguments={'folds': 5})
     model.fit(X.copy(), y.copy())
     model.refit(X.copy(), y.copy())
-    print(model.named_steps['regression'].show_models())
-    print(model.named_steps['regression'].sprint_statistics())
-    #TODO https://scikit-learn.org/stable/modules/model_persistence.html#persistence-example
+    print(model.show_models())
+    print(model.sprint_statistics())
+    write_model(model, 'auto')
     return model
 
 @print_models
