@@ -14,19 +14,20 @@
 
 
 import numpy as np
-import pickle
 
 from autosklearn.regression import AutoSklearnRegressor
-from sklearn.linear_model import Ridge
+from sklearn.feature_selection import SelectKBest
+from sklearn.linear_model import ElasticNet
 from sklearn.metrics import r2_score, make_scorer
 from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, Normalizer
+from sklearn.preprocessing import StandardScaler, Normalizer, PowerTransformer
 from skopt import BayesSearchCV
-from skopt.space import Real, Categorical
+from skopt.space import Real, Integer, Categorical
 
 from db.cache import read_model, write_model, model_exists
 from ml2.postprocessing import mov_to_win_percent
+from ml2.transformers import DiffTransformer
 
 
 #TODO include below until https://github.com/scikit-optimize/scikit-optimize/issues/718 is resolved
@@ -53,13 +54,15 @@ def print_models(func):
 @print_models
 def manual_regression_model(X, y, random_state):
     grid = {
-        'regression__alpha': Real(1e+0, 1e+2, prior='log-uniform')
+        'selection__k': Integer(2, 50),
+        'regression__alpha': Real(1e-2, 1e+1, prior='log-uniform')
     }
     iters = len(grid.keys()) * 5 if len(grid.keys()) > 1 else 1
-    model = Pipeline(steps=[#TODO feature engineering
-                            #TODO feture selection
-                            #TODO preprocessing
-                            ('regression', Ridge(random_state=random_state))
+    model = Pipeline(steps=[#('diffs', DiffTransformer()), #TODO
+                            ('selection', SelectKBest()),
+                            ('gaussianization', PowerTransformer()),
+                            ('standardization', StandardScaler()),
+                            ('regression', ElasticNet(random_state=random_state))
                            ])
     model = BayesSearchCV(model, grid, cv=10, scoring=make_scorer(r2_score), n_jobs=4, random_state=random_state, n_iter=iters)
     model.fit(X, y)
@@ -68,7 +71,7 @@ def manual_regression_model(X, y, random_state):
 def auto_regression_model(X, y):
     if model_exists('auto'):
         return read_model('auto')
-    model = AutoSklearnRegressor(resampling_strategy='cv', resampling_strategy_arguments={'folds': 5})
+    model = AutoSklearnRegressor(resampling_strategy='cv', resampling_strategy_arguments={'folds': 5}) #TODO 10, limit number of processors?
     model.fit(X.copy(), y.copy())
     model.refit(X.copy(), y.copy())
     print(model.show_models())
@@ -87,7 +90,7 @@ def deep_learning_regression_model(X, y, random_state):
     model = Pipeline(steps=[('normalization', Normalizer()),
                             ('regression', MLPRegressor(random_state=random_state))
                            ])
-    model = BayesSearchCV(model, grid, cv=10, scoring=make_scorer(r2_score), n_jobs=4, random_state=random_state, n_iter=iters)
+    model = BayesSearchCV(model, grid, cv=10, scoring=make_scorer(r2_score), n_jobs=4, random_state=random_state, n_iter=iters) #TODO 3-way holdout instead of k folds
     model.fit(X, y)
     return model
 

@@ -48,14 +48,14 @@ if __name__ == '__main__':
     games = add_games(games, future_games)
     games = fill_missing_stats(games)
 
-    games_and_features = extract_features(games)
-    games_and_features = filter_out_of_window_games(games_and_features, start_year, start_day, predict_year)
+    features = extract_features(games)
+    features = filter_out_of_window_games(features, start_year, start_day, predict_year)
 
-    X_train, X_test, X_predict, y_train, y_test = custom_train_test_split(games_and_features, predict_year)
+    X_train, X_test, X_predict, y_train, y_test = custom_train_test_split(features, predict_year)
 
-    #model1 = manual_regression_model(X_train, y_train, random_state)
+    model1 = manual_regression_model(X_train, y_train, random_state)
     #model1 = deep_learning_regression_model(X_train, y_train, random_state)
-    model1 = auto_regression_model(X_train, y_train)
+    #model1 = auto_regression_model(X_train, y_train)
 
     if X_test.size > 0:
         result_probas = average_predictions([model1], X_test, tourney_mov_std(games))

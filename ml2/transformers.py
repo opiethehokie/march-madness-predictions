@@ -13,10 +13,8 @@
 #   limitations under the License.
 
 
-import numpy as np
 import pandas as pd
 
-from scipy.stats import boxcox, skew
 from sklearn.base import BaseEstimator, TransformerMixin
 
 
@@ -35,30 +33,6 @@ class ColumnSelector(BaseEstimator, TransformerMixin):
         if self.cols[-1] - 1 > X.shape[1]:
             return X.values
         return X[self.cols].values
-
-class SkewnessTransformer(BaseEstimator, TransformerMixin):
-
-    # lmbda -1 is reciprocal
-    # lmbda -.5 is reciprocal sqare root
-    # lmbda 0 is log
-    # lmbda .5 is square root
-    # lmbda 1 is no transform
-    # lmbda None is statistically tuned
-    def __init__(self, max_skew=2.5, lmbda=None):
-        self.max_skew = max_skew
-        self.lmbda = lmbda
-
-    def fit(self, _X, _y=None):
-        return self
-
-    def transform(self, X):
-        X = pd.DataFrame(X)
-        skewed_feats = X.apply(skew)
-        very_skewed_feats = skewed_feats[np.abs(skewed_feats) > self.max_skew]
-        transformed = X.copy()
-        for idx in very_skewed_feats.index:
-            transformed[idx] = boxcox(X[idx]+1, lmbda=self.lmbda)[0]
-        return transformed.values
 
 class DiffTransformer(BaseEstimator, TransformerMixin):
 

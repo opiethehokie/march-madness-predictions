@@ -1,20 +1,16 @@
-PREPROCESSING:
-
-- synthesize games by adjusting stats
-
 FEATURES:
 
-- fourier transform
 - kurtosis and skew
-- discretization / binning (KBins or Quantile transformer)
-- rank transform (scipy.stats.rankdata)
-- Power transformer instead of my own
 - better time series (avg, moving avg, exponential smoothing, Holt's linear trend, ... dropping high and low)
 - momentum as a streak
-- revisit diff transformer, it should be useful
+- fourier transform
+
+- Power transformer instead of my own
+- discretization / binning (KBins or Quantile transformer)
+- rank transform (scipy.stats.rankdata)
+
 - kalman filter
 - Elo rating
-- just points for my ratings to reduce complexity
 
 ENSEMBLE:
 
@@ -25,3 +21,13 @@ ANALYSIS:
 
 - significance test for telling if a model is better than another
 - confidence intervals for final model
+- look at forcing more predictions up or down
+
+type I type II error?
+
+final model needs to be without CV
+bring back my own CV for one model?
+
+
+if the 95% confidence intervals of the accuracies of two models do not overlap, we can reject the null 
+hypothesis that the performance of both classifiers is equal at a confidence level of α=0.05 (or 5% probability)

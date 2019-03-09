@@ -17,6 +17,7 @@ from collections import defaultdict
 from functools import partial
 
 import numpy as np
+import pandas as pd
 
 
 TOURNEY_START_DAY = 134
@@ -62,6 +63,55 @@ def modified_rpi(X, weights=(.15, .15, .7)):
             rpis.append([lrpi, wrpi])
     return np.array(rpis)
 
+def _descriptive_stats(results):
+    described = []
+    for stat in results.keys():
+        described.append(min(results[stat]))
+        described.append(max(results[stat]))
+        described.append(np.std(results[stat]))
+        described.append(np.median(results[stat]))
+        described.append(np.mean(results[stat]))
+    return described
+
+def statistics(X):
+    stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
+    compiled_stats = []
+    for row in X.itertuples(index=False):
+        if row.Daynum < TOURNEY_START_DAY:
+            wposs = row.Wfga - row.Wor + row.Wto + .475 * row.Wfta
+            lposs = row.Lfga - row.Lor + row.Lto + .475 * row.Lfta
+            stats[row.Season][row.Wteam]['eff_field_goal_percent'].append((row.Wfgm + .5 * row.Wfgm3) / row.Wfga)
+            stats[row.Season][row.Lteam]['eff_field_goal_percent'].append((row.Lfgm + .5 * row.Lfgm3) / row.Lfga)
+            stats[row.Season][row.Wteam]['true_shooting'].append(.5 * row.Wscore / (row.Wfga + 0.475 * row.Wfta))
+            stats[row.Season][row.Lteam]['true_shooting'].append(.5 * row.Lscore / (row.Lfga + 0.475 * row.Lfta))
+            stats[row.Season][row.Wteam]['rebound_rate'].append(row.Wor / (row.Wor + row.Ldr))
+            stats[row.Season][row.Lteam]['rebound_rate'].append(row.Lor / (row.Lor + row.Wdr))
+            stats[row.Season][row.Wteam]['free_throw_rate'].append((row.Wfta / row.Wftm) if row.Wftm > 0 else 0)
+            stats[row.Season][row.Lteam]['free_throw_rate'].append((row.Lfta / row.Lftm) if row.Lftm > 0 else 0)
+            stats[row.Season][row.Wteam]['turnover_rate'].append(row.Wto / wposs)
+            stats[row.Season][row.Lteam]['turnover_rate'].append(row.Lto / lposs)
+            stats[row.Season][row.Wteam]['assist_rate'].append(row.Wast / row.Wfgm)
+            stats[row.Season][row.Lteam]['assist_rate'].append(row.Last / row.Lfgm)
+            stats[row.Season][row.Wteam]['block_rate'].append(row.Wblk / row.Lfga)
+            stats[row.Season][row.Lteam]['block_rate'].append(row.Lblk / row.Wfga)
+            stats[row.Season][row.Wteam]['steal_rate'].append(row.Wstl / lposs)
+            stats[row.Season][row.Lteam]['steal_rate'].append(row.Lstl / wposs)
+            stats[row.Season][row.Wteam]['score_rate'].append(row.Wscore / wposs)
+            stats[row.Season][row.Lteam]['score_rate'].append(row.Lscore / lposs)
+            stats[row.Season][row.Wteam]['foul_rate'].append(row.Wpf / lposs)
+            stats[row.Season][row.Lteam]['foul_rate'].append(row.Lpf / wposs)
+        wstats = _descriptive_stats(stats[row.Season][row.Wteam])
+        lstats = _descriptive_stats(stats[row.Season][row.Lteam])
+        if not wstats:
+            wstats = [0] * int(len(compiled_stats[0]) / 2)
+        if not lstats:
+            lstats = [0] * int(len(compiled_stats[0]) / 2)
+        if row.Wteam < row.Lteam:
+            compiled_stats.append(np.hstack((wstats, lstats)))
+        else:
+            compiled_stats.append(np.hstack((lstats, wstats)))
+    return np.array(compiled_stats)
+
 def _all_teams(data):
     seasons = data['Season'].unique()
     teams = {}
@@ -70,3 +120,32 @@ def _all_teams(data):
         sorted_teams = sorted((season_games['Wteam'].append(season_games['Lteam'])).unique())
         teams[season] = {X:i for i, X in enumerate(sorted_teams)}
     return teams
+
+def custom_ratings(X, rating_F, preseason_games=None):
+    first_day = min(np.unique(X['Daynum']))
+    if preseason_games is not None:
+        X = pd.concat([preseason_games, X], ignore_index=True)
+    teams = _all_teams(X)
+    seasons = np.unique(X['Season'])
+    stat_categories = {X:i for i, X in enumerate(['points'])}
+    stats = {season: np.zeros((len(teams[season]), len(teams[season]), len(stat_categories))) for season in seasons}
+    ratings = []
+    day = 0
+    adj_stats = None
+    for row in X.itertuples(index=False):
+        wteam_id = teams[row.Season][row.Wteam]
+        lteam_id = teams[row.Season][row.Lteam]
+        stats[row.Season][wteam_id][lteam_id][stat_categories['points']] += row.Wscore
+        stats[row.Season][lteam_id][wteam_id][stat_categories['points']] += row.Lscore
+        if row.Daynum >= first_day:
+            if row.Daynum > day or row.Daynum == 0:
+                adj_stats = rating_F(stats)
+                day = row.Daynum
+            team_ids = teams[row.Season]
+            wrating = adj_stats[row.Season][team_ids[row.Wteam]]
+            lrating = adj_stats[row.Season][team_ids[row.Lteam]]
+            if row.Wteam < row.Lteam:
+                ratings.append(np.hstack((wrating, lrating)))
+            else:
+                ratings.append(np.hstack((lrating, wrating)))
+    return np.array(ratings)

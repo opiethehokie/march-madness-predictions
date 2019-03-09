@@ -13,10 +13,4 @@
 #   limitations under the License.
 
 
-from tempfile import mkdtemp
-
-import os
-import numpy as np
-import pandas as pd
-
-from ml2.training import manual_regression_model
+#TODO this would be to calculate chance of winning were base rate is seed odds which are updated by my proba

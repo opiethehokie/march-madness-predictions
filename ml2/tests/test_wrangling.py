@@ -17,8 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ml2 import preprocessing
-
+from ml2 import wrangling
 
 
 @pytest.fixture
@@ -40,7 +39,7 @@ def test_custom_cv():
                   [2014, 55],
                   [2014, 138],
                   [2015, 22]])
-    indices = preprocessing.custom_cv(X)
+    indices = wrangling.custom_cv(X)
     assert len(indices) == 2
     assert np.array_equal(np.array([2, 4], dtype=np.int64), indices[0][0])
     assert np.array_equal(np.array([1], dtype=np.int64), indices[0][1])
@@ -55,4 +54,4 @@ def test_overtime_adjustments(box_scores):
                                      11, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88],
                                     [2010, 1, 2, 'N', 11, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
                                      4, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80]], dtype=object),
-                          preprocessing.adjust_overtime_games(box_scores).values)
+                          wrangling.adjust_overtime_games(box_scores).values)
