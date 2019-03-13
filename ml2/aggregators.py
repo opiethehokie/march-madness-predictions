@@ -18,10 +18,16 @@ from functools import partial
 
 import numpy as np
 import pandas as pd
+import scipy
+
+from statsmodels.tsa.api import SimpleExpSmoothing, Holt
 
 
 TOURNEY_START_DAY = 134
 
+
+# these are calculated using stats from the game to be predicted which seems wrong, but it handles the first
+# game problem and we don't use any tourney stats, so I think it's ok
 
 def _rpi(season_results, team, weights):
     results = season_results[team]['results']
@@ -63,17 +69,39 @@ def modified_rpi(X, weights=(.15, .15, .7)):
             rpis.append([lrpi, wrpi])
     return np.array(rpis)
 
-def _descriptive_stats(results):
+# these stats features seem to be highly correlated and can make the regression unstable
+
+def descriptive_stats(results):
     described = []
     for stat in results.keys():
         described.append(min(results[stat]))
         described.append(max(results[stat]))
-        described.append(np.std(results[stat]))
         described.append(np.median(results[stat]))
-        described.append(np.mean(results[stat]))
+        described.append(np.mean(sorted(results[stat])[1:-1]) if len(results[stat]) >= 3 else np.mean(results[stat]))
+        described.append(np.std(results[stat])) # second moment
+        described.append(scipy.stats.skew(results[stat])) #third moment
+        described.append(scipy.stats.kurtosis(results[stat])) # fourth moment
     return described
 
-def statistics(X):
+def time_series_stats(results):
+    timed = []
+    for stat in results.keys():
+        timed.append(np.mean(results[stat][-5:])) # simple 5 game moving average
+        if len(results[stat]) > 1:
+            timed.append(np.mean(SimpleExpSmoothing(results[stat]).fit(smoothing_level=.3, optimized=False).fittedvalues)) # exponential smoothing
+            timed.append(np.mean(Holt(results[stat]).fit(smoothing_level=.5, smoothing_slope=.5, optimized=False).fittedvalues)) # Holt's linear trend
+        else:
+            timed.append(results[stat][0])
+            timed.append(results[stat][0])
+    return timed
+
+def vanilla_stats(results):
+    stats = []
+    for stat in results.keys():
+        stats.append(np.mean(results[stat]))
+    return stats
+
+def statistics(X, stat_F):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     compiled_stats = []
     for row in X.itertuples(index=False):
@@ -100,8 +128,8 @@ def statistics(X):
             stats[row.Season][row.Lteam]['score_rate'].append(row.Lscore / lposs)
             stats[row.Season][row.Wteam]['foul_rate'].append(row.Wpf / lposs)
             stats[row.Season][row.Lteam]['foul_rate'].append(row.Lpf / wposs)
-        wstats = _descriptive_stats(stats[row.Season][row.Wteam])
-        lstats = _descriptive_stats(stats[row.Season][row.Lteam])
+        wstats = stat_F(stats[row.Season][row.Wteam])
+        lstats = stat_F(stats[row.Season][row.Lteam])
         if not wstats:
             wstats = [0] * int(len(compiled_stats[0]) / 2)
         if not lstats:
@@ -149,3 +177,37 @@ def custom_ratings(X, rating_F, preseason_games=None):
             else:
                 ratings.append(np.hstack((lrating, wrating)))
     return np.array(ratings)
+
+# https://www.kaggle.com/lpkirwin/fivethirtyeight-elo-ratings
+
+def _elo_pred(elo1, elo2):
+    return 1 / (10 ** (-(elo1 - elo2) / 400) + 1)
+
+def _elo_expected_margin(elo_diff):
+    return 7.5 + 0.006 * elo_diff
+
+def _elo_update(welo, lelo, mov):
+    elo_diff = welo - lelo
+    pred = _elo_pred(welo, lelo)
+    mult = ((mov + 3) ** 0.8) / _elo_expected_margin(elo_diff)
+    update = 20 * mult * (1 - pred)
+    return update
+
+def elo(X):
+    stats = defaultdict(partial(defaultdict, lambda: 1500))
+    elos = []
+    for row in X.itertuples(index=False):
+        welo = stats[row.Season][row.Wteam]
+        lelo = stats[row.Season][row.Lteam]
+        if row.Daynum < TOURNEY_START_DAY:
+            mov = row.Wscore - row.Lscore
+            wadvantage = 100 if row.Wloc == 'H' else 0
+            ladvantage = 0 if row.Wloc == 'H' else 100
+            update = _elo_update(welo + wadvantage, lelo + ladvantage, mov)
+            stats[row.Season][row.Wteam] += update
+            stats[row.Season][row.Lteam] -= update
+        if row.Wteam < row.Lteam:
+            elos.append([welo, lelo])
+        else:
+            elos.append([lelo, welo])
+    return elos

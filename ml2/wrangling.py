@@ -13,13 +13,12 @@
 #   limitations under the License.
 
 
-import itertools
 import numpy as np
 import pandas as pd
-import scipy as sp
+import scipy
 
 from db.cache import read_features, write_features, features_exist
-from ml2.aggregators import modified_rpi, statistics, custom_ratings
+from ml2.aggregators import modified_rpi, statistics, custom_ratings, vanilla_stats, elo
 from ratings.off_def import adjust_stats
 from ratings.markov import markov_stats
 
@@ -30,7 +29,7 @@ TOURNEY_START_DAY = 134
 
 def filter_outlier_games(data, m=5):
     numeric_data = data.select_dtypes(include=['int64'])
-    return data[(np.abs(sp.stats.zscore(numeric_data)) < m).all(axis=1)]
+    return data[(np.abs(scipy.stats.zscore(numeric_data)) < m).all(axis=1)]
 
 def adjust_overtime_games(data):
     data = data.copy()
@@ -92,7 +91,7 @@ def custom_train_test_split(data, predict_year, drop=True):
     predict_games = data[(data.Season == predict_year) & (data.Daynum == 999)]
     train_results = train_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(_mov, axis=1)
     test_results = test_games[['Wteam', 'Lteam']].apply(_win, axis=1)
-    not_needed_cols = ['Daynum', 'Season', 'Wteam', 'Lteam', 'Wscore', 'Lscore', 'Wloc', 'Numot',
+    not_needed_cols = ['Wteam', 'Lteam', 'Wscore', 'Lscore', 'Wloc', 'Numot',
                        'Wfgm', 'Wfga', 'Wfgm3', 'Wfga3', 'Wftm', 'Wfta', 'Wor', 'Wdr', 'Wast', 'Wto', 'Wstl', 'Wblk', 'Wpf',
                        'Lfgm', 'Lfga', 'Lfgm3', 'Lfga3', 'Lftm', 'Lfta', 'Lor', 'Ldr', 'Last', 'Lto', 'Lstl', 'Lblk', 'Lpf']
     if drop:
@@ -139,29 +138,29 @@ def _construct_sos(data, bust_cache=False):
 def _construct_stats(data, bust_cache=False):
     if features_exist('stats') and not bust_cache:
         return read_features('stats')
-    raw = statistics(data)
+    raw = statistics(data, vanilla_stats)
     num_stats = int(np.size(raw, 1) / 2)
     a_cols = ['stat_%sa' % i for i in range(1, num_stats + 1)]
     b_cols = ['stat_%sb' % i for i in range(1, num_stats + 1)]
-    stats = pd.DataFrame(raw, columns=[x for x in itertools.chain.from_iterable(itertools.zip_longest(a_cols, b_cols)) if x])
+    stats = pd.DataFrame(raw, columns=a_cols+b_cols)
     write_features(stats, 'stats')
     return stats
 
 def _construct_ratings(data, bust_cache=False):
     if features_exist('ratings') and not bust_cache:
         return read_features('ratings')
-    offdef = pd.DataFrame(custom_ratings(data, adjust_stats), columns=['off_a', 'off_b', 'def_a', 'def_b'])
-    markov = pd.DataFrame(custom_ratings(data, markov_stats), columns=['markov_a', 'markov_b'])
-    ratings = pd.concat([offdef, markov], axis=1)
+    rating1 = pd.DataFrame(custom_ratings(data, adjust_stats), columns=['off_a', 'def_a', 'off_b', 'def_b'])
+    rating2 = pd.DataFrame(custom_ratings(data, markov_stats), columns=['markov_a', 'markov_b'])
+    rating3 = pd.DataFrame(elo(data), columns=['eloa', 'elob'])
+    ratings = pd.concat([rating1, rating2, rating3], axis=1)
     write_features(ratings, 'ratings')
     return ratings
 
+#TODO why are stats features no good?
 def extract_features(data):
     sos = _construct_sos(data)
-    stats = _construct_stats(data)
     ratings = _construct_ratings(data)
     return pd.concat([data.reset_index(drop=True),
                       sos.reset_index(drop=True),
-                      stats.reset_index(drop=True),
                       ratings.reset_index(drop=True)
                      ], axis=1)

@@ -1,33 +1,21 @@
-FEATURES:
-
-- kurtosis and skew
-- better time series (avg, moving avg, exponential smoothing, Holt's linear trend, ... dropping high and low)
-- momentum as a streak
-- fourier transform
-
-- Power transformer instead of my own
-- discretization / binning (KBins or Quantile transformer)
-- rank transform (scipy.stats.rankdata)
-
-- kalman filter
-- Elo rating
-
-ENSEMBLE:
 
 - multiple runs with different seeds
 - train over multiple years to make final hyperparameter selections
-
-ANALYSIS:
+- final model needs to be without cv
 
 - significance test for telling if a model is better than another
 - confidence intervals for final model
-- look at forcing more predictions up or down
-
-type I type II error?
-
-final model needs to be without CV
-bring back my own CV for one model?
 
 
-if the 95% confidence intervals of the accuracies of two models do not overlap, we can reject the null 
-hypothesis that the performance of both classifiers is equal at a confidence level of α=0.05 (or 5% probability)
+
+
+
+
+
+.45 / .507 with rpi,ratings
+.43 / .498 plus rankings
+
+
+est training parameters: {'regression__activation': 'logistic', 'regression__alpha': 0.01, 'regression__hidden_layer_sizes': (8,)}
+Best training accuracy: 0.46
+Test log loss: 0.528571

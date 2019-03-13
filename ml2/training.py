@@ -13,24 +13,26 @@
 #   limitations under the License.
 
 
-import numpy as np
-
 from autosklearn.regression import AutoSklearnRegressor
-from sklearn.feature_selection import SelectKBest
-from sklearn.linear_model import ElasticNet
+from mlxtend.feature_selection import ColumnSelector
+from sklearn.decomposition import PCA
+from sklearn.feature_selection import SelectFromModel
+from sklearn.linear_model import Ridge, LassoCV
 from sklearn.metrics import r2_score, make_scorer
 from sklearn.neural_network import MLPRegressor
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler, Normalizer, PowerTransformer
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.preprocessing import PowerTransformer, FunctionTransformer
 from skopt import BayesSearchCV
 from skopt.space import Real, Integer, Categorical
 
 from db.cache import read_model, write_model, model_exists
-from ml2.postprocessing import mov_to_win_percent
-from ml2.transformers import DiffTransformer
+from ml2.transformers import assign_ranks
+from ml2.wrangling import custom_cv
 
 
-#TODO include below until https://github.com/scikit-optimize/scikit-optimize/issues/718 is resolved
+n_jobs = 4
+
+# include below until https://github.com/scikit-optimize/scikit-optimize/issues/718 is resolved
 #pylint: disable=function-redefined
 class BayesSearchCV(BayesSearchCV):
     def _run_search(self, _):
@@ -51,27 +53,36 @@ def print_models(func):
         return model
     return printed_func
 
+
 @print_models
-def manual_regression_model(X, y, random_state):
+def manual_regression_model(X, y, random_state=42, tune=True):
     grid = {
-        'selection__k': Integer(2, 50),
+        'preprocessing2__n_components': Integer(4, X.shape[1]*2),
+        'selection__threshold': Categorical(['median', '.5*median', '.75*median']),
         'regression__alpha': Real(1e-2, 1e+1, prior='log-uniform')
     }
-    iters = len(grid.keys()) * 5 if len(grid.keys()) > 1 else 1
-    model = Pipeline(steps=[#('diffs', DiffTransformer()), #TODO
-                            ('selection', SelectKBest()),
-                            ('gaussianization', PowerTransformer()),
-                            ('standardization', StandardScaler()),
-                            ('regression', ElasticNet(random_state=random_state))
+
+    model = Pipeline(steps=[('engineering', FeatureUnion([('orig', ColumnSelector(2, X.shape[1])),
+                                                          ('ranked', FunctionTransformer(assign_ranks, validate=False))
+                                                         ], n_jobs=n_jobs)),
+                            ('preprocessing1', PowerTransformer(standardize=True)), # minimizes skewness
+                            ('preprocessing2', PCA(random_state=random_state)), # helps with multicollinearity problems
+                            ('selection', SelectFromModel(LassoCV(cv=3, random_state=random_state, n_jobs=n_jobs))),
+                            ('regression', Ridge(random_state=random_state, max_iter=2500))
                            ])
-    model = BayesSearchCV(model, grid, cv=10, scoring=make_scorer(r2_score), n_jobs=4, random_state=random_state, n_iter=iters)
+
+    if tune:
+        model = BayesSearchCV(model, grid, cv=10, scoring=make_scorer(r2_score), n_jobs=n_jobs, random_state=random_state, n_iter=25)
+
     model.fit(X, y)
     return model
 
-def auto_regression_model(X, y):
-    if model_exists('auto'):
+
+def auto_regression_model(X, y, random_state=42, tune=True):
+    if model_exists('auto') and not tune:
         return read_model('auto')
-    model = AutoSklearnRegressor(resampling_strategy='cv', resampling_strategy_arguments={'folds': 5}) #TODO 10, limit number of processors?
+    model = AutoSklearnRegressor(time_left_for_this_task=60*60*5, per_run_time_limit=60*10, seed=random_state, resampling_strategy='cv',
+                                 resampling_strategy_arguments={'folds': 5})
     model.fit(X.copy(), y.copy())
     model.refit(X.copy(), y.copy())
     print(model.show_models())
@@ -79,24 +90,24 @@ def auto_regression_model(X, y):
     write_model(model, 'auto')
     return model
 
+
 @print_models
-def deep_learning_regression_model(X, y, random_state):
+def deep_learning_regression_model(X, y, random_state=42, tune=True):
     grid = {
-        'regression__hidden_layer_sizes': Categorical([(100, 50)]), #TODO
-        'regression__activation': Categorical(['relu']),
-        'regression__alpha': Real(1e-7, 1e-5, prior='log-uniform'),
+        'regression__hidden_layer_sizes': Categorical([(int(X.shape[0]/(X.shape[1]*10)),),
+                                                       (X.shape[1]+2,),
+                                                       (int((X.shape[1]+2)*.67),),
+                                                       (int((X.shape[1]+2)*.5),)
+                                                      ]),
+        'regression__activation': Categorical(['logistic', 'relu']),
+        'regression__alpha': Real(1e-6, 1e-2, prior='log-uniform')
     }
-    iters = len(grid.keys()) * 5 if len(grid.keys()) > 1 else 1
-    model = Pipeline(steps=[('normalization', Normalizer()),
-                            ('regression', MLPRegressor(random_state=random_state))
-                           ])
-    model = BayesSearchCV(model, grid, cv=10, scoring=make_scorer(r2_score), n_jobs=4, random_state=random_state, n_iter=iters) #TODO 3-way holdout instead of k folds
+
+    model = Pipeline(steps=[('selection', ColumnSelector(cols=[i for i in range(2, X.shape[1]-2)])),
+                            ('regression', MLPRegressor(random_state=random_state, max_iter=1000))
+                            ])
+    if tune:
+        model = BayesSearchCV(model, grid, cv=custom_cv(X), scoring=make_scorer(r2_score), n_jobs=n_jobs, random_state=random_state, n_iter=25)
+
     model.fit(X, y)
     return model
-
-def average_predictions(models, X, mov_std):
-    predictions = []
-    for model in models:
-        predictions.append(model.predict(X))
-    results = np.mean(np.array(predictions), axis=0)
-    return [mov_to_win_percent(yi, mov_std) for yi in results]

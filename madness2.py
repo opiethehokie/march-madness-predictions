@@ -21,10 +21,10 @@ from sklearn.metrics import log_loss
 
 from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
                        championship_pairings, possible_tourney_matchups)
-from ml2.training import manual_regression_model, deep_learning_regression_model, auto_regression_model, average_predictions
+from ml2.training import manual_regression_model, deep_learning_regression_model, auto_regression_model
 from ml2.wrangling import (adjust_overtime_games, custom_train_test_split, filter_outlier_games, oversample_neutral_site_games,
                            filter_out_of_window_games, extract_features, add_games, fill_missing_stats, tourney_mov_std)
-from ml2.postprocessing import override_final_predictions
+from ml2.postprocessing import override_final_predictions, average_predictions
 from simulations.bracket import simulate_tourney
 
 
@@ -53,9 +53,9 @@ if __name__ == '__main__':
 
     X_train, X_test, X_predict, y_train, y_test = custom_train_test_split(features, predict_year)
 
-    model1 = manual_regression_model(X_train, y_train, random_state)
-    #model1 = deep_learning_regression_model(X_train, y_train, random_state)
-    #model1 = auto_regression_model(X_train, y_train)
+    #model1 = manual_regression_model(X_train, y_train, random_state)
+    model1 = deep_learning_regression_model(X_train, y_train, random_state)
+    #model1 = auto_regression_model(X_train, y_train, random_state)
 
     if X_test.size > 0:
         result_probas = average_predictions([model1], X_test, tourney_mov_std(games))

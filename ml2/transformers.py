@@ -13,35 +13,10 @@
 #   limitations under the License.
 
 
-import pandas as pd
+from scipy.stats import rankdata
 
-from sklearn.base import BaseEstimator, TransformerMixin
+import numpy as np
 
 
-class ColumnSelector(BaseEstimator, TransformerMixin):
-
-    def __init__(self, cols=None):
-        self.cols = cols
-
-    def fit(self, _X, _y=None):
-        return self
-
-    def transform(self, X):
-        X = pd.DataFrame(X)
-        if not self.cols:
-            return X.values
-        if self.cols[-1] - 1 > X.shape[1]:
-            return X.values
-        return X[self.cols].values
-
-class DiffTransformer(BaseEstimator, TransformerMixin):
-
-    def fit(self, _X, _y=None):
-        return self
-
-    #pylint: disable=no-self-use
-    def transform(self, X):
-        df = pd.DataFrame(X)
-        even_df = df.iloc[:, [i for i in range(len(df.columns)) if i%2 == 0]]
-        odd_df = df.iloc[:, [i for i in range(len(df.columns)) if i%2 == 1]]
-        return pd.DataFrame(even_df.values - odd_df.values).values
+def assign_ranks(X):
+    return np.apply_along_axis(rankdata, 0, X)
