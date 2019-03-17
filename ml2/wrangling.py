@@ -91,7 +91,7 @@ def custom_train_test_split(data, predict_year, drop=True):
     predict_games = data[(data.Season == predict_year) & (data.Daynum == 999)]
     train_results = train_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(_mov, axis=1)
     test_results = test_games[['Wteam', 'Lteam']].apply(_win, axis=1)
-    not_needed_cols = ['Wteam', 'Lteam', 'Wscore', 'Lscore', 'Wloc', 'Numot',
+    not_needed_cols = ['Season', 'Daynum', 'Wteam', 'Lteam', 'Wscore', 'Lscore', 'Wloc', 'Numot',
                        'Wfgm', 'Wfga', 'Wfgm3', 'Wfga3', 'Wftm', 'Wfta', 'Wor', 'Wdr', 'Wast', 'Wto', 'Wstl', 'Wblk', 'Wpf',
                        'Lfgm', 'Lfga', 'Lfgm3', 'Lfga3', 'Lftm', 'Lfta', 'Lor', 'Ldr', 'Last', 'Lto', 'Lstl', 'Lblk', 'Lpf']
     if drop:
@@ -156,7 +156,6 @@ def _construct_ratings(data, bust_cache=False):
     write_features(ratings, 'ratings')
     return ratings
 
-#TODO why are stats features no good?
 def extract_features(data):
     sos = _construct_sos(data)
     ratings = _construct_ratings(data)

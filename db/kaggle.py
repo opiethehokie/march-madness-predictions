@@ -20,13 +20,13 @@ import numpy as np
 import pandas as pd
 
 
-TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2017.csv'
-SEASON_DATA_FILE = 'data/regular_season_detailed_results_2018.csv'
+TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2018.csv'
+SEASON_DATA_FILE = 'data/regular_season_detailed_results_2019.csv'
 SUBMISSION_FILE = 'results/submission%s.csv'
 SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv'
 TEAMS_FILE = 'data/teams.csv'
-SEEDS_FILE = 'data/seeds_2018.csv'
-SLOTS_FILE = 'data/slots_2018.csv'
+SEEDS_FILE = 'data/seeds_2019.csv'
+SLOTS_FILE = 'data/slots_2019.csv'
 
 
 def game_data():

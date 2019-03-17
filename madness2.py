@@ -21,7 +21,7 @@ from sklearn.metrics import log_loss
 
 from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
                        championship_pairings, possible_tourney_matchups)
-from ml2.training import manual_regression_model, deep_learning_regression_model, auto_regression_model
+from ml2.training import manual_regression_model, auto_regression_model
 from ml2.wrangling import (adjust_overtime_games, custom_train_test_split, filter_outlier_games, oversample_neutral_site_games,
                            filter_out_of_window_games, extract_features, add_games, fill_missing_stats, tourney_mov_std)
 from ml2.postprocessing import override_final_predictions, average_predictions
@@ -53,18 +53,18 @@ if __name__ == '__main__':
 
     X_train, X_test, X_predict, y_train, y_test = custom_train_test_split(features, predict_year)
 
-    #model1 = manual_regression_model(X_train, y_train, random_state)
-    model1 = deep_learning_regression_model(X_train, y_train, random_state)
-    #model1 = auto_regression_model(X_train, y_train, random_state)
+    models = [manual_regression_model(X_train, y_train, random_state, tune=False),
+              auto_regression_model(X_train, y_train, random_state, tune=False)
+             ]
 
     if X_test.size > 0:
-        result_probas = average_predictions([model1], X_test, tourney_mov_std(games))
+        result_probas = average_predictions(models, X_test, tourney_mov_std(games))
         print('Test log loss: %f' % log_loss(y_test, result_probas))
-    #prediction_probas = average_predictions([model1], X_predict, tourney_mov_std(games))
-    #slots = championship_pairings()
-    #seeds = team_seed_mapping()
-    #write_predictions(predict_matchups, prediction_probas)
-    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 0), '-0')
-    #write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 1), '-1')
-    #if predict_year >= 2015 and predict_year <= 2018:
-    #    simulate_tourney(team_id_mapping(), read_predictions(), predict_year)
+    prediction_probas = average_predictions(models, X_predict, tourney_mov_std(games))
+    slots = championship_pairings()
+    seeds = team_seed_mapping()
+    write_predictions(predict_matchups, prediction_probas)
+    write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 0), '-0')
+    write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 1), '-1')
+    if 2015 <= predict_year <= 2018:
+        simulate_tourney(team_id_mapping(), read_predictions(), predict_year)
