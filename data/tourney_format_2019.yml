@@ -3,67 +3,67 @@
 # winner of first two regions will play in final four, winner of second two regions will play in final four
 # order of "seed: team" in each region should match actual brackets
 # play-in teams represented like: teama | teamb
-S1: 
-S16: 
-S8: 
-S9: 
-S5: 
-S12: 
-S4: 
-S13: 
-S6: 
-S11: 
-S3: 
-S14: 
-S7: 
-S10: 
-S2: 
-S15: 
-W1: 
-W16: 
-W8: 
-W9: 
-W5: 
-W12: 
-W4: 
-W13: 
-W6: 
-W11: 
-W3: 
-W14: 
-W7: 
-W10: 
-W2: 
-W15: 
-E1: 
-E16: 
-E8: 
-E9: 
-E5: 
-E12: 
-E4: 
-E13: 
-E6: 
-E11: 
-E3: 
-E14: 
-E7: 
-E10: 
-E2: 
-E15: 
-M1: 
-M16: 
-M8: 
-M9: 
-M5: 
-M12: 
-M4: 
-M13: 
-M6: 
-M11: 
-M3: 
-M14: 
-M7: 
-M10: 
-M2: 
-M15: 
+E1: Duke
+E16: NC Central | N Dakota St
+E8: VA Commonwealth
+E9: UCF
+E5: Mississippi St
+E12: Liberty
+E4: Virginia Tech
+E13: St Louis
+E6: Maryland
+E11: Belmont | Temple
+E3: LSU
+E14: Yale
+E7: Louisville
+E10: Minnesota
+E2: Michigan St
+E15: Bradley
+W1: Gonzaga
+W16: F Dickinson | Prairie View
+W8: Syracuse
+W9: Baylor
+W5: Marquette
+W12: Murray St
+W4: Florida St
+W13: Vermont
+W6: Buffalo
+W11: Arizona St | St John's
+W3: Texas Tech
+W14: N Kentucky
+W7: Nevada
+W10: Florida
+W2: Michigan
+W15: Montana
+S1: Virginia
+S16: Gardner Webb
+S8: Mississippi
+S9: Oklahoma
+S5: Wisconsin
+S12: Oregon
+S4: Kansas St
+S13: UC Irvine
+S6: Villanova
+S11: St Mary's CA
+S3: Purdue
+S14: Old Dominion
+S7: Cincinnati
+S10: Iowa
+S2: Tennessee
+S15: Colgate
+M1: North Carolina
+M16: Iona
+M8: Utah St
+M9: Washington
+M5: Auburn
+M12: New Mexico St
+M4: Kansas
+M13: Northeastern
+M6: Iowa St
+M11: Ohio St
+M3: Houston
+M14: Georgia St
+M7: Wofford
+M10: Seton Hall
+M2: Kentucky
+M15: Abilene Chr

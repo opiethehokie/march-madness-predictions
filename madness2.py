@@ -34,7 +34,7 @@ np.random.seed(random_state)
 
 if __name__ == '__main__':
 
-    predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2017
+    predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2018
 
     start_year = 2009
     start_day = 20
@@ -53,8 +53,8 @@ if __name__ == '__main__':
 
     X_train, X_test, X_predict, y_train, y_test = custom_train_test_split(features, predict_year)
 
-    models = [manual_regression_model(X_train, y_train, random_state, tune=False),
-              auto_regression_model(X_train, y_train, random_state, tune=False)
+    models = [manual_regression_model(X_train, y_train, random_state, tune=True),
+              auto_regression_model(X_train, y_train, random_state, tune=True)
              ]
 
     if X_test.size > 0:
@@ -66,5 +66,5 @@ if __name__ == '__main__':
     write_predictions(predict_matchups, prediction_probas)
     write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 0), '-0')
     write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 1), '-1')
-    if 2015 <= predict_year <= 2018:
+    if 2015 <= predict_year <= 2019:
         simulate_tourney(team_id_mapping(), read_predictions(), predict_year)

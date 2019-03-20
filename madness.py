@@ -52,9 +52,9 @@ if __name__ == '__main__':
         mov_std = tourney_mov_std(games)
 
         for rs in np.random.randint(0, 1000, 10):
-            model1 = manual_regression_model(X_train, y_train, random_state=rs, tune=False)
+            model1 = manual_regression_model(X_train, y_train, random_state=int(rs), tune=False)
             model1_results.append(log_loss(y_test, [mov_to_win_percent(yi, mov_std) for yi in model1.predict(X_test)]))
-            model2 = auto_regression_model(X_train, y_train, random_state=rs, tune=False)
+            model2 = auto_regression_model(X_train, y_train, random_state=int(rs), tune=False)
             model2_results.append(log_loss(y_test, [mov_to_win_percent(yi, mov_std) for yi in model2.predict(X_test)]))
 
     print('Year %i' % predict_year)

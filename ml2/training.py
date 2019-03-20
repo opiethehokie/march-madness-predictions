@@ -90,9 +90,3 @@ def auto_regression_model(X, y, random_state=42, tune=True):
     print(model.sprint_statistics())
     write_model(model, 'auto')
     return model
-
-    #0.560888
-    #0.545895
-    #0.606680
-    #0.567307
-    #0.630177

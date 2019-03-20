@@ -10,7 +10,7 @@ Create Conda environment (with 64-bit Anaconda Python 3.6 on Ubuntu Linux):
 
 Predict tournament games for a single year 2015-2018:
 
-`python madness.py <year>`
+`python madness2.py <year>`
 
 Probabilities for every possible tournament game are written to CSV files in the results directory. These are then used to simulate the tournament and the results are printed to the console to be used for filling out a traditional bracket.
 
