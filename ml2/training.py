@@ -156,3 +156,8 @@ def stacked_model(X, y, rs=42):
                                  meta_classifier=CalibratedClassifierCV(GaussianNB(), cv=5))
     model.fit(X, y)
     return model
+
+@print_models
+def genetic_model(X, y):
+    #TODO https://gplearn.readthedocs.io/en/stable/reference.html#symbolic-classifier
+    pass
