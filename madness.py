@@ -13,54 +13,103 @@
 #   limitations under the License.
 
 
+import random
+import sys
+
 import numpy as np
 
-from sklearn.metrics import log_loss
+from eli5 import explain_weights, format_as_text
+from sklearn.metrics import log_loss, roc_curve, confusion_matrix, auc, accuracy_score, classification_report
 
-from db.kaggle import game_data, possible_tourney_matchups
-from ml2.training import manual_regression_model, auto_regression_model
+from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
+                       championship_pairings, possible_tourney_matchups)
+from ml2.training import manual_model, automl_model, neural_network_model, stacked_model
 from ml2.wrangling import (adjust_overtime_games, custom_train_test_split, filter_outlier_games, oversample_neutral_site_games,
-                           filter_out_of_window_games, extract_features, add_games, fill_missing_stats, tourney_mov_std)
-from ml2.postprocessing import significance_test, confidence_intervals, mov_to_win_percent
+                           filter_out_of_window_games, extract_features, concat_games, fill_missing_stats)
+from ml2.postprocessing import (override_final_predictions, average_predictions, average_prediction_probas, significance_test,
+                                confidence_intervals, effect_size)
+from simulations.bracket import simulate_tourney
+
+
+random_state = 42
+random.seed(random_state)
+np.random.seed(random_state)
 
 
 if __name__ == '__main__':
 
-    predict_years = [2018]
+    predict_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2018
 
     start_year = 2009
-    start_day = 20
+    start_day = 60
+    check_confidence = False
+    save_predictions = True
+    run_simulations = True
 
-    model1_results = []
-    model2_results = []
+    predict_matchups, future_games = possible_tourney_matchups(predict_year)
 
-    for predict_year in predict_years:
+    # ETL
 
-        predict_matchups, future_games = possible_tourney_matchups(predict_year)
+    games = game_data()
+    games = adjust_overtime_games(games)
+    games = filter_outlier_games(games)
+    games = oversample_neutral_site_games(games)
+    games = concat_games(games, future_games)
+    games = fill_missing_stats(games)
+    features = extract_features(games, start_day)
+    games, features = filter_out_of_window_games(games, features, start_day, start_year, predict_year)
+    assert games.shape[0] == features.shape[0]
 
-        games = game_data()
-        games = adjust_overtime_games(games)
-        games = filter_outlier_games(games)
-        games = oversample_neutral_site_games(games)
-        games = add_games(games, future_games)
-        games = fill_missing_stats(games)
+    # ML
 
-        features = extract_features(games)
-        features = filter_out_of_window_games(features, start_year, start_day, predict_year)
-        X_train, X_test, _, y_train, y_test = custom_train_test_split(features, predict_year)
+    X_train, X_test, X_predict, y_train, y_test, cv = custom_train_test_split(games, features, predict_year)
+    assert X_train.shape[0] == y_train.shape[0]
+    assert X_test.shape[0] == y_test.shape[0]
 
-        mov_std = tourney_mov_std(games)
+    models = [manual_model(X_train, y_train, cv, random_state, tune=False),
+              neural_network_model(X_train, y_train, random_state, tune=False),
+              automl_model(X_train, y_train, random_state, tune=False),
+              #stacked_model(X_train, y_train, random_state)
+             ]
 
+    if X_test.size > 0:
+        #print('Feature list:\n', ['%i:%s' % (i, features.columns[i]) for i in range(0, len(features.columns))])
+        results = average_predictions(models, X_test)
+        result_probas = average_prediction_probas(models, X_test)
+        print('Test accuracy: %f' % accuracy_score(y_test, results))
+        print('Test confustion matrix:\n', confusion_matrix(y_test, results))
+        print('Test classification report:\n', classification_report(y_test, results))
+        fp_rates, tp_rates, _ = roc_curve(y_test, results)
+        print('Test AUC: %f' % auc(fp_rates, tp_rates))
+        #for model in models:
+        #    print('Test model weights:\n', format_as_text(explain_weights(model)))
+        print('Test log loss: %f' % log_loss(y_test, result_probas))
+
+    if save_predictions:
+        prediction_probas = average_prediction_probas(models, X_predict)
+        slots = championship_pairings()
+        seeds = team_seed_mapping()
+        write_predictions(predict_matchups, prediction_probas)
+        write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 0), '-0')
+        write_predictions(predict_matchups, override_final_predictions(slots, seeds, predict_matchups, prediction_probas, 1), '-1')
+
+    # data sci
+
+    if check_confidence and X_test.size > 0:
+        model1_results = []
+        model2_results = []
         for rs in np.random.randint(0, 1000, 10):
-            model1 = manual_regression_model(X_train, y_train, random_state=int(rs), tune=False)
-            model1_results.append(log_loss(y_test, [mov_to_win_percent(yi, mov_std) for yi in model1.predict(X_test)]))
-            model2 = auto_regression_model(X_train, y_train, random_state=int(rs), tune=False)
-            model2_results.append(log_loss(y_test, [mov_to_win_percent(yi, mov_std) for yi in model2.predict(X_test)]))
+            np.random.seed(rs)
+            model1 = manual_model(X_train, y_train, rs=rs, tune=False)
+            model1_results.append(log_loss(y_test, model1.predict_proba(X_test)[:, 1]))
+            model2 = neural_network_model(X_train, y_train, rs=rs, tune=False)
+            model2_results.append(log_loss(y_test, model2.predict_proba(X_test)[:, 1]))
+        print('Models are significantly different: ', significance_test(model1_results, model2_results))
+        print('Effect size: ', effect_size(model1_results, model2_results))
+        print('95 percent confidence intervals for model 1: ', confidence_intervals(model1_results))
+        print('95 percent confidence intervals for model 2: ', confidence_intervals(model2_results))
+        lower, upper = confidence_intervals(np.mean(np.array([model1_results, model2_results]), axis=0))
+        print('95 percent confidence intervals for average: %f - %f' % (lower, upper))
 
-    print('Year %i' % predict_year)
-    print('Models are significantly different: ', significance_test(model1_results, model2_results))
-    print('95 percent confidence intervals for manual regression: ', confidence_intervals(model1_results))
-    print('95 percent confidence intervals for auto regression: ', confidence_intervals(model2_results))
-    lower, upper = confidence_intervals(np.mean(np.array([model1_results, model2_results]), axis=0))
-    print('95 percent confidence intervals for average: %f - %f' % (lower, upper))
-    print()
+    if run_simulations:
+        simulate_tourney(team_id_mapping(), read_predictions(), predict_year)

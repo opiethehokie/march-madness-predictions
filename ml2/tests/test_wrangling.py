@@ -39,11 +39,14 @@ def test_custom_cv():
                   [2014, 55],
                   [2014, 138],
                   [2015, 22]])
-    indices = wrangling.custom_cv(X)
+    X = pd.DataFrame(X)
+    X.index = pd.MultiIndex.from_arrays(X[[0, 1]].values.T, names=['Season', 'Daynum'])
+    indices = wrangling._custom_cv(X)
+    print(indices)
     assert len(indices) == 2
-    assert np.array_equal(np.array([2, 4], dtype=np.int64), indices[0][0])
+    assert np.array_equal(np.array([0], dtype=np.int64), indices[0][0])
     assert np.array_equal(np.array([1], dtype=np.int64), indices[0][1])
-    assert np.array_equal(np.array([0, 4], dtype=np.int64), indices[1][0])
+    assert np.array_equal(np.array([2], dtype=np.int64), indices[1][0])
     assert np.array_equal(np.array([3], dtype=np.int64), indices[1][1])
 
 #pylint: disable=redefined-outer-name

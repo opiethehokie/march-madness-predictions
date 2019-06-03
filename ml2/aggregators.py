@@ -17,7 +17,6 @@ from collections import defaultdict
 from functools import partial
 
 import numpy as np
-import pandas as pd
 import scipy
 
 from statsmodels.tsa.api import SimpleExpSmoothing, Holt
@@ -52,24 +51,23 @@ def _opponents_opponents_win_percent(season_results, opponents):
         win_percents.append(win_percent)
     return sum(win_percents) / len(opponents) if opponents else 0
 
-def modified_rpi(X, weights=(.15, .15, .7)):
+def modified_rpi(X, start_day, weights=(.15, .15, .7)):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     rpis = []
     for row in X.itertuples(index=False):
+        if row.Daynum >= start_day:
+            wrpi = _rpi(stats[row.Season], row.Wteam, weights)
+            lrpi = _rpi(stats[row.Season], row.Lteam, weights)
+            if row.Wteam < row.Lteam:
+                rpis.append(wrpi - lrpi)
+            else:
+                rpis.append(lrpi - wrpi)
         if row.Daynum < TOURNEY_START_DAY:
             stats[row.Season][row.Wteam]['opponents'].append(row.Lteam)
             stats[row.Season][row.Lteam]['opponents'].append(row.Wteam)
             stats[row.Season][row.Wteam]['results'].append(1)
             stats[row.Season][row.Lteam]['results'].append(0)
-        wrpi = _rpi(stats[row.Season], row.Wteam, weights)
-        lrpi = _rpi(stats[row.Season], row.Lteam, weights)
-        if row.Wteam < row.Lteam:
-            rpis.append([wrpi, lrpi])
-        else:
-            rpis.append([lrpi, wrpi])
     return np.array(rpis)
-
-# these stats features seem to be highly correlated and can make the regression unstable
 
 def descriptive_stats(results):
     described = []
@@ -101,10 +99,17 @@ def vanilla_stats(results):
         stats.append(np.mean(results[stat]))
     return stats
 
-def statistics(X, stat_F):
+def statistics(X, start_day, stat_F):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     compiled_stats = []
     for row in X.itertuples(index=False):
+        if row.Daynum >= start_day:
+            wstats = stat_F(stats[row.Season][row.Wteam])
+            lstats = stat_F(stats[row.Season][row.Lteam])
+            if row.Wteam < row.Lteam:
+                compiled_stats.append(np.subtract(wstats, lstats))
+            else:
+                compiled_stats.append(np.subtract(lstats, wstats))
         if row.Daynum < TOURNEY_START_DAY:
             wposs = row.Wfga - row.Wor + row.Wto + .475 * row.Wfta
             lposs = row.Lfga - row.Lor + row.Lto + .475 * row.Lfta
@@ -128,16 +133,6 @@ def statistics(X, stat_F):
             stats[row.Season][row.Lteam]['score_rate'].append(row.Lscore / lposs)
             stats[row.Season][row.Wteam]['foul_rate'].append(row.Wpf / lposs)
             stats[row.Season][row.Lteam]['foul_rate'].append(row.Lpf / wposs)
-        wstats = stat_F(stats[row.Season][row.Wteam])
-        lstats = stat_F(stats[row.Season][row.Lteam])
-        if not wstats:
-            wstats = [0] * int(len(compiled_stats[0]) / 2)
-        if not lstats:
-            lstats = [0] * int(len(compiled_stats[0]) / 2)
-        if row.Wteam < row.Lteam:
-            compiled_stats.append(np.hstack((wstats, lstats)))
-        else:
-            compiled_stats.append(np.hstack((lstats, wstats)))
     return np.array(compiled_stats)
 
 def _all_teams(data):
@@ -149,33 +144,31 @@ def _all_teams(data):
         teams[season] = {X:i for i, X in enumerate(sorted_teams)}
     return teams
 
-def custom_ratings(X, rating_F, preseason_games=None):
-    first_day = min(np.unique(X['Daynum']))
-    if preseason_games is not None:
-        X = pd.concat([preseason_games, X], ignore_index=True)
+def custom_ratings(X, start_day, rating_F):
     teams = _all_teams(X)
     seasons = np.unique(X['Season'])
     stat_categories = {X:i for i, X in enumerate(['points'])}
     stats = {season: np.zeros((len(teams[season]), len(teams[season]), len(stat_categories))) for season in seasons}
     ratings = []
-    day = 0
+    day = start_day - 1
     adj_stats = None
     for row in X.itertuples(index=False):
-        wteam_id = teams[row.Season][row.Wteam]
-        lteam_id = teams[row.Season][row.Lteam]
-        stats[row.Season][wteam_id][lteam_id][stat_categories['points']] += row.Wscore
-        stats[row.Season][lteam_id][wteam_id][stat_categories['points']] += row.Lscore
-        if row.Daynum >= first_day:
-            if row.Daynum > day or row.Daynum == 0:
+        if row.Daynum < TOURNEY_START_DAY:
+            if row.Daynum > day:
                 adj_stats = rating_F(stats)
                 day = row.Daynum
+            wteam_id = teams[row.Season][row.Wteam]
+            lteam_id = teams[row.Season][row.Lteam]
+            stats[row.Season][wteam_id][lteam_id][stat_categories['points']] += row.Wscore
+            stats[row.Season][lteam_id][wteam_id][stat_categories['points']] += row.Lscore
+        if row.Daynum >= start_day:
             team_ids = teams[row.Season]
             wrating = adj_stats[row.Season][team_ids[row.Wteam]]
             lrating = adj_stats[row.Season][team_ids[row.Lteam]]
             if row.Wteam < row.Lteam:
-                ratings.append(np.hstack((wrating, lrating)))
+                ratings.append(np.subtract(wrating, lrating))
             else:
-                ratings.append(np.hstack((lrating, wrating)))
+                ratings.append(np.subtract(lrating, wrating))
     return np.array(ratings)
 
 # https://www.kaggle.com/lpkirwin/fivethirtyeight-elo-ratings
@@ -193,21 +186,22 @@ def _elo_update(welo, lelo, mov):
     update = 20 * mult * (1 - pred)
     return update
 
-def elo(X):
+def elo(X, start_day):
     stats = defaultdict(partial(defaultdict, lambda: 1500))
     elos = []
     for row in X.itertuples(index=False):
         welo = stats[row.Season][row.Wteam]
         lelo = stats[row.Season][row.Lteam]
+        if row.Daynum >= start_day:
+            if row.Wteam < row.Lteam:
+                elos.append(welo - lelo)
+            else:
+                elos.append(lelo - welo)
         if row.Daynum < TOURNEY_START_DAY:
             mov = row.Wscore - row.Lscore
             wadvantage = 100 if row.Wloc == 'H' else 0
-            ladvantage = 0 if row.Wloc == 'H' else 100
+            ladvantage = 100 if row.Wloc == 'A' else 0
             update = _elo_update(welo + wadvantage, lelo + ladvantage, mov)
             stats[row.Season][row.Wteam] += update
             stats[row.Season][row.Lteam] -= update
-        if row.Wteam < row.Lteam:
-            elos.append([welo, lelo])
-        else:
-            elos.append([lelo, welo])
     return elos
