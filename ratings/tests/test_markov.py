@@ -1,4 +1,4 @@
-#   Copyright 2016-2018 Michael Peters
+#   Copyright 2016-2019 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -21,8 +21,6 @@ import pytest
 
 from ratings import markov
 
-
-numpy.seterr(all='raise')
 
 expected = [0.03313267, 0.0666793, 0.03089082, 0.07173901, 0.0486637,
             0.04862142, 0.03690847, 0.04821738, 0.05771672, 0.07952477,

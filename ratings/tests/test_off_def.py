@@ -1,4 +1,4 @@
-#   Copyright 2016-2018 Michael Peters
+#   Copyright 2016-2019 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -17,10 +17,9 @@ import numpy
 import pandas
 
 from ratings import off_def
+#pylint: disable=unused-import
 from ratings.tests.test_markov import soccer_goals
 
-
-numpy.seterr(all='raise')
 
 def test_off_def_ratings():
     teams = ['blue', 'gold', 'silver']
@@ -40,9 +39,9 @@ def test_off_def_ratings():
     assert numpy.allclose(offensive, [0.47, 0.77, 0.61], .01)
     assert numpy.allclose(defensive, [0.91, 0.98, 1.11], .01)
 
-def test_off_def_ratings2():
-    goals = soccer_goals()
-    actual_o, actual_d = off_def.off_def_ratings(goals.values)
+#pylint: disable=redefined-outer-name
+def test_off_def_ratings2(soccer_goals):
+    actual_o, actual_d = off_def.off_def_ratings(soccer_goals.values)
     expected_o = numpy.array([31.33843405, 68.37509144, 27.76305066, 72.38060068, 47.09823379,
                               47.49119705, 33.00865301, 46.17519618, 53.39592662, 82.09304749,
                               60.90819241, 40.48603638, 51.71478376, 48.63047941, 31.81090453,
