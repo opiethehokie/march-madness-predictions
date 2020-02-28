@@ -113,6 +113,7 @@ def statistics(X, start_day, stat_F):
         if row.Daynum < TOURNEY_START_DAY:
             wposs = row.Wfga - row.Wor + row.Wto + .475 * row.Wfta
             lposs = row.Lfga - row.Lor + row.Lto + .475 * row.Lfta
+            # interaction features based on commonly used metrics
             stats[row.Season][row.Wteam]['eff_field_goal_percent'].append((row.Wfgm + .5 * row.Wfgm3) / row.Wfga)
             stats[row.Season][row.Lteam]['eff_field_goal_percent'].append((row.Lfgm + .5 * row.Lfgm3) / row.Lfga)
             stats[row.Season][row.Wteam]['true_shooting'].append(.5 * row.Wscore / (row.Wfga + 0.475 * row.Wfta))

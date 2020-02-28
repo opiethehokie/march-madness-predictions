@@ -98,6 +98,8 @@ def custom_train_test_split(data, features, predict_year):
     return (train_features.values.astype('float64'), test_features.values.astype('float64'), predict_features.values.astype('float64'),
             train_results.values, test_results.values, cv)
 
+# sort of walk-forward cross-validation
+# https://medium.com/@samuel.monnier/cross-validation-tools-for-time-series-ffa1a5a09bf9
 def _custom_cv(X):
     season_idx = X.index.get_level_values('Season')
     seasons = np.sort(season_idx.unique())
