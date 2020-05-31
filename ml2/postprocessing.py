@@ -18,6 +18,7 @@ from math import sqrt
 import numpy as np
 
 from scipy.stats import norm, normaltest, ttest_ind, ks_2samp
+from statsmodels.stats.power import TTestIndPower
 
 
 # two submissions means we can always get championship game correct
@@ -90,7 +91,15 @@ def confidence_intervals(vals, alpha=.95):
 
 # https://www.kdnuggets.com/2019/01/comparing-machine-learning-models-statistical-vs-practical-significance.html
 
-# small if less than .1 or .3
+# quantifies size of effect if statistically significant, small if less than .1 or .3
 def effect_size(vals1, vals2):
     p = _t_test(vals1, vals2) if _normal(vals1) and _normal(vals2) else _ks_test(vals1, vals2)
-    return abs(p) / sqrt(len(vals1))
+    return abs(norm.ppf(p)) / sqrt(len(vals1))
+
+#TODO
+# probability of true positive (only useful when null hypothesis rejected), used to estimate min sample size
+def power():
+    analysis = TTestIndPower()
+    return analysis.solve_power(.8, power=.8, nobs1=None, ratio=1.0, alpha=.05) # 20% chance of type II error, 5% chance type I error
+
+

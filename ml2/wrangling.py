@@ -13,6 +13,7 @@
 #   limitations under the License.
 
 
+import feature_engine as fe
 import numpy as np
 import pandas as pd
 import scipy
@@ -28,9 +29,15 @@ TOURNEY_START_DAY = 134
 # cleaning
 
 def filter_outlier_games(data, m=5):
-    numeric_data = data.select_dtypes(include=['int64'])
-    return data[(np.abs(scipy.stats.zscore(numeric_data)) < m).all(axis=1)]
+    #numeric_data = data.select_dtypes(include=['int64'])
+    #return data[(np.abs(scipy.stats.zscore(numeric_data)) < m).all(axis=1)]
+    #TODO
+    data = fe.outlier_removers.OutlierTrimmer(distribution='gaussian', fold=m, tail='both').fit_transform(data)
 
+    return data
+
+
+#TODO instead of adjusting just remove?
 def adjust_overtime_games(data):
     data = data.copy()
     for row in data.itertuples(index=True):

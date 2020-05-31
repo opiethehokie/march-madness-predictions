@@ -13,9 +13,10 @@
 #   limitations under the License.
 
 
-from autosklearn.classification import AutoSklearnClassifier
+#from autosklearn.classification import AutoSklearnClassifier
 from eli5.sklearn.permutation_importance import PermutationImportance
 from eli5 import transform_feature_names
+from feature_engine.discretisers import EqualFrequencyDiscretiser, EqualWidthDiscretiser
 from mlxtend.classifier import StackingCVClassifier
 from mlxtend.feature_selection import ColumnSelector
 from sklearn.calibration import CalibratedClassifierCV
@@ -32,9 +33,9 @@ from sklearn.svm import LinearSVC
 from skopt import BayesSearchCV
 from skopt.space import Real, Integer, Categorical
 
-import autosklearn.metrics
+#import autosklearn.metrics
 
-from db.cache import read_model, write_model, model_exists
+#from db.cache import read_model, write_model, model_exists
 
 
 n_jobs = 4
@@ -44,7 +45,6 @@ n_jobs = 4
 class BayesSearchCV(BayesSearchCV):
     def _run_search(self, _):
         raise BaseException('Use newer skopt')
-
 
 def print_models(func):
     def printed_func(*args, **kwargs):
@@ -61,7 +61,6 @@ def print_models(func):
         return model
     return printed_func
 
-
 @transform_feature_names.register(ColumnSelector)
 def feature_names(transformer, in_names=None):
     return ['orig' + str(i) for i in range(0, len(transformer.cols))]
@@ -74,9 +73,8 @@ def feature_names(transformer, in_names=None):
 def feature_names(transformer, in_names=None):
     return ['cluster' + str(i) for i in range(0, transformer.n_clusters)]
 
-
 @print_models
-def manual_model(X, y, cv=10, rs=42, tune=True):
+def linear_model(X, y, cv=10, rs=42, tune=True):
     grid = {
         'engineering__pca__n_components': Integer(2, 8),
         'engineering__cluster__n_clusters': Integer(2, 8),
@@ -86,17 +84,22 @@ def manual_model(X, y, cv=10, rs=42, tune=True):
     }
 
     sparse_features = LinearSVC(C=.1, random_state=rs, penalty='l1', dual=False, max_iter=10000)
-    feature_importances = PermutationImportance(sparse_features, cv=None, random_state=rs)
+    feature_importances = PermutationImportance(sparse_features, cv=None, random_state=rs) #TODO comment how does this relate to SHAP?
 
-    model = Pipeline(steps=[('engineering', FeatureUnion([('cols', ColumnSelector(cols=[i for i in range(0, X.shape[1])])),
+    model = Pipeline(steps=[('preprocessing', StandardScaler()),
+                            #('preprocessing', PowerTransformer()), #TODO
+                            ('engineering', FeatureUnion([('cols', ColumnSelector(cols=[i for i in range(0, X.shape[1])])),
                                                           # dimension reduction helps with multicollinearity
                                                           ('pca', PCA(random_state=rs, n_components=2)),
-                                                          ('cluster', FeatureAgglomeration(n_clusters=2))
+                                                          ('cluster', FeatureAgglomeration(n_clusters=2)),
+                                                          #TODO
+                                                          #('bins', EqualWidthDiscretiser(bins=10)),
+                                                          ('bins', EqualFrequencyDiscretiser(q=10))
                                                          ])),
-                            ('preprocessing', StandardScaler()),
-                            ('selection', SelectFromModel(feature_importances, threshold=.0005)),
+                            #TODO correlation based feature selection ANOVA/Kendall
+                            ('selection', SelectFromModel(feature_importances, threshold=.0005)), # mean decrease accuracy (MDA)
                             # logistic regression shuffles which helps with autocorrelation
-                            ('classification', LogisticRegression(C=.001, random_state=rs, dual=False, solver='saga', penalty='l2', max_iter=10000))
+                            ('classification', LogisticRegression(C=.001, random_state=rs, dual=False, solver='saga', penalty='l2', max_iter=10000)) #TODO l1 would do feature selection
                            ])
 
     if tune:
@@ -106,19 +109,31 @@ def manual_model(X, y, cv=10, rs=42, tune=True):
     model.fit(X, y)
     return model
 
+@print_models
+def mov_regression_model(X, y):
+    #TODO https://github.com/opiethehokie/march-madness-predictions/commit/569aedb0ae1dc44ec462add654671f49e0e7236a
+    #TODO mov should be capped
+    #TODO correlation based feature selection pearson/spearman
+    pass
 
-def automl_model(X, y, rs=42, tune=True):
-    name = 'auto'
-    if model_exists(name) and not tune:
-        return read_model(name)
-    model = AutoSklearnClassifier(time_left_for_this_task=60*60*8, per_run_time_limit=60*15, seed=rs, resampling_strategy='cv',
-                                  resampling_strategy_arguments={'folds': 5})
-    model.fit(X.copy(), y.copy(), metric=autosklearn.metrics.log_loss)
-    model.refit(X.copy(), y.copy())
-    print(model.show_models())
-    print(model.sprint_statistics())
-    write_model(model, name)
-    return model
+@print_models
+def tree_model(X, y):
+    #TODO xgboost
+    pass
+
+# Linux only
+#def automl_model(X, y, rs=42, tune=True):
+#    name = 'auto'
+#    if model_exists(name) and not tune:
+#        return read_model(name)
+#    model = AutoSklearnClassifier(time_left_for_this_task=60*60*8, per_run_time_limit=60*15, seed=rs, resampling_strategy='cv',
+#                                  resampling_strategy_arguments={'folds': 5})
+#    model.fit(X.copy(), y.copy(), metric=autosklearn.metrics.log_loss)
+#    model.refit(X.copy(), y.copy())
+#    print(model.show_models())
+#    print(model.sprint_statistics())
+#    write_model(model, name)
+#    return model
 
 @print_models
 def neural_network_model(X, y, rs=42, tune=True):
@@ -148,14 +163,25 @@ def neural_network_model(X, y, rs=42, tune=True):
     return model
 
 @print_models
+def genetic_model(X, y):
+    #TODO https://gplearn.readthedocs.io/en/stable/reference.html#symbolic-classifier
+    pass
+
+@print_models
 def stacked_model(X, y, rs=42):
-    clfs = [manual_model(X, y, rs=rs, tune=False),
+    clfs = [linear_model(X, y, rs=rs, tune=False),
             neural_network_model(X, y, rs=rs, tune=False),
            ]
+    #TODO try EnsembleVoteClassifier too, this could just be ensemble model
     model = StackingCVClassifier(classifiers=clfs, use_features_in_secondary=False, use_probas=True,
-                                 meta_classifier=CalibratedClassifierCV(GaussianNB(), cv=5))
+                                 meta_classifier=CalibratedClassifierCV(GaussianNB(), cv=5)) #TODO could this be bagged?
     model.fit(X, y)
     return model
+
+@print_models
+def bagged_model(X, y):
+    #TODO https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.BaggingClassifier.html
+    pass
 
 @print_models
 def genetic_model(X, y):

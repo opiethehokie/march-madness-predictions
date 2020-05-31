@@ -16,14 +16,14 @@
 import random
 import sys
 
+import shap
 import numpy as np
 
-from eli5 import explain_weights, format_as_text
 from sklearn.metrics import log_loss, roc_curve, confusion_matrix, auc, accuracy_score, classification_report
 
 from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
                        championship_pairings, possible_tourney_matchups)
-from ml2.training import manual_model, automl_model, neural_network_model, stacked_model
+from ml2.training import linear_model, neural_network_model, stacked_model
 from ml2.wrangling import (adjust_overtime_games, custom_train_test_split, filter_outlier_games, oversample_neutral_site_games,
                            filter_out_of_window_games, extract_features, concat_games, fill_missing_stats)
 from ml2.postprocessing import (override_final_predictions, average_predictions, average_prediction_probas, significance_test,
@@ -45,6 +45,7 @@ if __name__ == '__main__':
     check_confidence = False
     save_predictions = True
     run_simulations = True
+    explain_features = False
 
     predict_matchups, future_games = possible_tourney_matchups(predict_year)
 
@@ -66,9 +67,9 @@ if __name__ == '__main__':
     assert X_train.shape[0] == y_train.shape[0]
     assert X_test.shape[0] == y_test.shape[0]
 
-    models = [manual_model(X_train, y_train, cv, random_state, tune=False),
+    models = [linear_model(X_train, y_train, cv, random_state, tune=False),
               neural_network_model(X_train, y_train, random_state, tune=False),
-              automl_model(X_train, y_train, random_state, tune=False),
+              #automl_model(X_train, y_train, random_state, tune=False),
               #stacked_model(X_train, y_train, random_state)
              ]
 
@@ -81,8 +82,6 @@ if __name__ == '__main__':
         print('Test classification report:\n', classification_report(y_test, results))
         fp_rates, tp_rates, _ = roc_curve(y_test, results)
         print('Test AUC: %f' % auc(fp_rates, tp_rates))
-        #for model in models:
-        #    print('Test model weights:\n', format_as_text(explain_weights(model)))
         print('Test log loss: %f' % log_loss(y_test, result_probas))
 
     if save_predictions:
@@ -95,12 +94,13 @@ if __name__ == '__main__':
 
     # data sci
 
+    #TODO bootstrap method (varying year) instead of testing distribution, vary seed, 30 total (20 if really slow)
     if check_confidence and X_test.size > 0:
         model1_results = []
         model2_results = []
         for rs in np.random.randint(0, 1000, 10):
             np.random.seed(rs)
-            model1 = manual_model(X_train, y_train, rs=rs, tune=False)
+            model1 = linear_model(X_train, y_train, rs=rs, tune=False)
             model1_results.append(log_loss(y_test, model1.predict_proba(X_test)[:, 1]))
             model2 = neural_network_model(X_train, y_train, rs=rs, tune=False)
             model2_results.append(log_loss(y_test, model2.predict_proba(X_test)[:, 1]))
@@ -110,6 +110,14 @@ if __name__ == '__main__':
         print('95 percent confidence intervals for model 2: ', confidence_intervals(model2_results))
         lower, upper = confidence_intervals(np.mean(np.array([model1_results, model2_results]), axis=0))
         print('95 percent confidence intervals for average: %f - %f' % (lower, upper))
+    
+    #TODO
+    if explain_features and X_test.size > 0:
+        for model in models:
+            explainer = shap.KernelExplainer(model.predict_proba, X_train, link="logit") # game theoretic approach
+            shap_values = explainer.shap_values(X_test, nsamples=100)
+            shap.force_plot(explainer.expected_value[0], shap_values[0][0,:], X_test.iloc[0,:], link="logit")
+            shap.force_plot(explainer.expected_value[0], shap_values[0], X_test, link="logit")
 
     if run_simulations:
         simulate_tourney(team_id_mapping(), read_predictions(), predict_year)

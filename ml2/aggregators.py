@@ -76,18 +76,24 @@ def descriptive_stats(results):
         described.append(max(results[stat]))
         described.append(np.median(results[stat]))
         described.append(np.mean(sorted(results[stat])[1:-1]) if len(results[stat]) >= 3 else np.mean(results[stat]))
+        #TODO should it be variance?
         described.append(np.std(results[stat])) # second moment
         described.append(scipy.stats.skew(results[stat])) #third moment
         described.append(scipy.stats.kurtosis(results[stat])) # fourth moment
+        #TODO count above/below mean
+        #TODO count outside n stds
     return described
 
 def time_series_stats(results):
     timed = []
     for stat in results.keys():
+        #TODO last game
         timed.append(np.mean(results[stat][-5:])) # simple 5 game moving average
+        #TODO num consecutive less/greater than mean (monotonicity)
         if len(results[stat]) > 1:
             timed.append(np.mean(SimpleExpSmoothing(results[stat]).fit(smoothing_level=.3, optimized=False).fittedvalues)) # exponential smoothing
             timed.append(np.mean(Holt(results[stat]).fit(smoothing_level=.5, smoothing_slope=.5, optimized=False).fittedvalues)) # Holt's linear trend
+            #TODO other moments too
         else:
             timed.append(results[stat][0])
             timed.append(results[stat][0])
