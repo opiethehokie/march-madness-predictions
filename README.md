@@ -4,7 +4,7 @@ Based on https://www.kaggle.com/c/mens-machine-learning-competition-2018 format.
 
 ## Usage
 
-Create Conda environment (with 64-bit Anaconda Python 3.6 on Ubuntu Linux):
+Create Conda environment (developed with 64-bit Anaconda Python 3.8.2 on Windows 10):
 
 `conda env create -f environment.yml`
 
@@ -26,7 +26,7 @@ Run pylint static analysis:
 
 ```
 pylint madness.py
-pylint ml2
+pylint ml
 pylint ratings
 ```
 

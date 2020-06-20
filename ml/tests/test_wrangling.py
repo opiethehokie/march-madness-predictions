@@ -1,4 +1,4 @@
-#   Copyright 2016-2019 Michael Peters
+#   Copyright 2016-2020 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ml2 import wrangling
+from ml import wrangling
 
 
 @pytest.fixture
@@ -48,13 +48,3 @@ def test_custom_cv():
     assert np.array_equal(np.array([1], dtype=np.int64), indices[0][1])
     assert np.array_equal(np.array([2], dtype=np.int64), indices[1][0])
     assert np.array_equal(np.array([3], dtype=np.int64), indices[1][1])
-
-#pylint: disable=redefined-outer-name
-def test_overtime_adjustments(box_scores):
-    assert np.array_equal(np.array([[2010, 1, 0, 'H', 4, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50,
-                                     6, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100],
-                                    [2010, 1, 1, 'A', 6, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44,
-                                     11, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88, 88],
-                                    [2010, 1, 2, 'N', 11, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40, 40,
-                                     4, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80, 80]], dtype=object),
-                          wrangling.adjust_overtime_games(box_scores).values)

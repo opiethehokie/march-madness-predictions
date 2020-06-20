@@ -1,4 +1,4 @@
-#   Copyright 2016-2019 Michael Peters
+#   Copyright 2016-2020 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 from collections import defaultdict
 from functools import partial
 
+import itertools
 import numpy as np
 import scipy
 
@@ -75,25 +76,23 @@ def descriptive_stats(results):
         described.append(min(results[stat]))
         described.append(max(results[stat]))
         described.append(np.median(results[stat]))
-        described.append(np.mean(sorted(results[stat])[1:-1]) if len(results[stat]) >= 3 else np.mean(results[stat]))
-        #TODO should it be variance?
-        described.append(np.std(results[stat])) # second moment
+        described.append(np.mean(results[stat]))
+        described.append(np.var(results[stat])) # second moment
         described.append(scipy.stats.skew(results[stat])) #third moment
         described.append(scipy.stats.kurtosis(results[stat])) # fourth moment
-        #TODO count above/below mean
-        #TODO count outside n stds
     return described
 
 def time_series_stats(results):
     timed = []
     for stat in results.keys():
-        #TODO last game
+        timed.append(np.mean(results[stat][-1]))
         timed.append(np.mean(results[stat][-5:])) # simple 5 game moving average
-        #TODO num consecutive less/greater than mean (monotonicity)
+        mean = np.mean(results[stat])
+        timed.append(len(list(itertools.takewhile(lambda x, mean=mean: x > mean, reversed(results[stat]))))) # monotonicity
+        timed.append(len(list(itertools.takewhile(lambda x, mean=mean: x < mean, reversed(results[stat])))))
         if len(results[stat]) > 1:
-            timed.append(np.mean(SimpleExpSmoothing(results[stat]).fit(smoothing_level=.3, optimized=False).fittedvalues)) # exponential smoothing
-            timed.append(np.mean(Holt(results[stat]).fit(smoothing_level=.5, smoothing_slope=.5, optimized=False).fittedvalues)) # Holt's linear trend
-            #TODO other moments too
+            timed.append(SimpleExpSmoothing(results[stat]).fit(smoothing_level=.3, optimized=False).fittedvalues[-1]) # exponential smoothing
+            timed.append(Holt(results[stat]).fit(smoothing_level=.5, smoothing_slope=.5, optimized=False).fittedvalues[-1]) # Holt's linear trend
         else:
             timed.append(results[stat][0])
             timed.append(results[stat][0])

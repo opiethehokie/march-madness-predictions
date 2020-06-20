@@ -1,4 +1,4 @@
-#   Copyright 2016-2019 Michael Peters
+#   Copyright 2016-2020 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -13,13 +13,12 @@
 #   limitations under the License.
 
 
-import feature_engine as fe
+import feature_engine
 import numpy as np
 import pandas as pd
-import scipy
 
 from db.cache import read_features, write_features, features_exist
-from ml2.aggregators import modified_rpi, statistics, custom_ratings, vanilla_stats, time_series_stats, descriptive_stats, elo
+from ml.aggregators import modified_rpi, statistics, custom_ratings, vanilla_stats, time_series_stats, descriptive_stats, elo
 from ratings.off_def import adjust_stats
 from ratings.markov import markov_stats
 
@@ -29,49 +28,10 @@ TOURNEY_START_DAY = 134
 # cleaning
 
 def filter_outlier_games(data, m=5):
-    #numeric_data = data.select_dtypes(include=['int64'])
-    #return data[(np.abs(scipy.stats.zscore(numeric_data)) < m).all(axis=1)]
-    #TODO
-    data = fe.outlier_removers.OutlierTrimmer(distribution='gaussian', fold=m, tail='both').fit_transform(data)
+    return feature_engine.outlier_removers.OutlierTrimmer(distribution='gaussian', fold=m, tail='both').fit_transform(data)
 
-    return data
-
-
-#TODO instead of adjusting just remove?
-def adjust_overtime_games(data):
-    data = data.copy()
-    for row in data.itertuples(index=True):
-        if row.Numot > 0:
-            ot_adj = 40 / (40 + row.Numot * 5)
-            data.at[row.Index, 'Wscore'] = row.Wscore * ot_adj
-            data.at[row.Index, 'Lscore'] = row.Lscore * ot_adj
-            data.at[row.Index, 'Wfgm'] = row.Wfgm * ot_adj
-            data.at[row.Index, 'Lfgm'] = row.Lfgm * ot_adj
-            data.at[row.Index, 'Wfga'] = row.Wfga * ot_adj
-            data.at[row.Index, 'Lfga'] = row.Lfga * ot_adj
-            data.at[row.Index, 'Wfgm3'] = row.Wfgm3 * ot_adj
-            data.at[row.Index, 'Lfgm3'] = row.Lfgm3 * ot_adj
-            data.at[row.Index, 'Wfga3'] = row.Wfga3 * ot_adj
-            data.at[row.Index, 'Lfga3'] = row.Lfga3 * ot_adj
-            data.at[row.Index, 'Wftm'] = row.Wftm * ot_adj
-            data.at[row.Index, 'Lftm'] = row.Lftm * ot_adj
-            data.at[row.Index, 'Wfta'] = row.Wfta * ot_adj
-            data.at[row.Index, 'Lfta'] = row.Lfta * ot_adj
-            data.at[row.Index, 'Wor'] = row.Wor * ot_adj
-            data.at[row.Index, 'Lor'] = row.Lor * ot_adj
-            data.at[row.Index, 'Wdr'] = row.Wdr * ot_adj
-            data.at[row.Index, 'Ldr'] = row.Ldr * ot_adj
-            data.at[row.Index, 'Wast'] = row.Wast * ot_adj
-            data.at[row.Index, 'Last'] = row.Last * ot_adj
-            data.at[row.Index, 'Wto'] = row.Wto * ot_adj
-            data.at[row.Index, 'Lto'] = row.Lto * ot_adj
-            data.at[row.Index, 'Wstl'] = row.Wstl * ot_adj
-            data.at[row.Index, 'Lstl'] = row.Lstl * ot_adj
-            data.at[row.Index, 'Wblk'] = row.Wblk * ot_adj
-            data.at[row.Index, 'Lblk'] = row.Lblk * ot_adj
-            data.at[row.Index, 'Wpf'] = row.Wpf * ot_adj
-            data.at[row.Index, 'Lpf'] = row.Lpf * ot_adj
-    return data
+def filter_overtime_games(data):
+    return data[data['Numot'] == 0]
 
 def concat_games(data1, data2):
     return pd.concat([data1, data2], axis=0, sort=False, ignore_index=True)
@@ -120,7 +80,7 @@ def _win(df):
 def _mov(df):
     if df.Wteam < df.Lteam:
         return df.Wscore - df.Lscore
-    return df.Lscore - df.Wscore
+    return np.clip(df.Lscore - df.Wscore, -25, 25)
 
 # data stats
 
@@ -175,3 +135,21 @@ def extract_features(data, start_day):
     feature_data = data[(data.Daynum >= start_day)]
     features.index = pd.MultiIndex.from_arrays(feature_data[['Season', 'Daynum']].values.T, names=['Season', 'Daynum'])
     return features
+
+# ETL
+
+def prepare_data(games, future_games, start_day, start_year, predict_year):
+    print('Analyzing %d games' % len(games))
+    games = filter_overtime_games(games)
+    games = filter_outlier_games(games)
+    games = oversample_neutral_site_games(games)
+    games = concat_games(games, future_games)
+    games = fill_missing_stats(games)
+    features = extract_features(games, start_day)
+    games, features = filter_out_of_window_games(games, features, start_day, start_year, predict_year)
+    print('Training on %d games, %d' % (games.shape[0], features.shape[1]))
+    assert games.shape[0] == features.shape[0]
+    X_train, X_test, X_predict, y_train, y_test, cv = custom_train_test_split(games, features, predict_year)
+    assert X_train.shape[0] == y_train.shape[0]
+    assert X_test.shape[0] == y_test.shape[0]
+    return X_train, X_test, X_predict, y_train, y_test, cv

@@ -1,4 +1,4 @@
-#   Copyright 2016-2019 Michael Peters
+#   Copyright 2016-2020 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -23,11 +23,10 @@ from sklearn.metrics import log_loss, roc_curve, confusion_matrix, auc, accuracy
 
 from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
                        championship_pairings, possible_tourney_matchups)
-from ml2.training import linear_model, neural_network_model, stacked_model
-from ml2.wrangling import (adjust_overtime_games, custom_train_test_split, filter_outlier_games, oversample_neutral_site_games,
-                           filter_out_of_window_games, extract_features, concat_games, fill_missing_stats)
-from ml2.postprocessing import (override_final_predictions, average_predictions, average_prediction_probas, significance_test,
-                                confidence_intervals, effect_size)
+from ml.training import ensemble_model, linear_model, tree_model, genetic_model, neural_network_model
+from ml.wrangling import prepare_data
+from ml.postprocessing import (override_final_predictions, average_predictions, average_prediction_probas, significance_test,
+                               confidence_intervals, effect_size, statistical_power)
 from simulations.bracket import simulate_tourney
 
 
@@ -42,39 +41,26 @@ if __name__ == '__main__':
 
     start_year = 2009
     start_day = 60
-    check_confidence = False
+    check_confidence = True
     save_predictions = True
     run_simulations = True
-    explain_features = False
-
-    predict_matchups, future_games = possible_tourney_matchups(predict_year)
-
-    # ETL
+    explain_features = True
 
     games = game_data()
-    games = adjust_overtime_games(games)
-    games = filter_outlier_games(games)
-    games = oversample_neutral_site_games(games)
-    games = concat_games(games, future_games)
-    games = fill_missing_stats(games)
-    features = extract_features(games, start_day)
-    games, features = filter_out_of_window_games(games, features, start_day, start_year, predict_year)
-    assert games.shape[0] == features.shape[0]
+    predict_matchups, future_games = possible_tourney_matchups(predict_year)
+
+    X_train, X_test, X_predict, y_train, y_test, cv = prepare_data(games, future_games, start_day, start_year, predict_year)
 
     # ML
 
-    X_train, X_test, X_predict, y_train, y_test, cv = custom_train_test_split(games, features, predict_year)
-    assert X_train.shape[0] == y_train.shape[0]
-    assert X_test.shape[0] == y_test.shape[0]
-
-    models = [linear_model(X_train, y_train, cv, random_state, tune=False),
+    models = [linear_model(X_train, y_train, cv, random_state, tune=True),
               neural_network_model(X_train, y_train, random_state, tune=False),
-              #automl_model(X_train, y_train, random_state, tune=False),
-              #stacked_model(X_train, y_train, random_state)
+              tree_model(X_train, y_train, random_state, tune=True),
+              genetic_model(X_train, y_train, random_state, tune=True),
+              ensemble_model(X_train, y_train, random_state)
              ]
 
     if X_test.size > 0:
-        #print('Feature list:\n', ['%i:%s' % (i, features.columns[i]) for i in range(0, len(features.columns))])
         results = average_predictions(models, X_test)
         result_probas = average_prediction_probas(models, X_test)
         print('Test accuracy: %f' % accuracy_score(y_test, results))
@@ -94,29 +80,33 @@ if __name__ == '__main__':
 
     # data sci
 
-    #TODO bootstrap method (varying year) instead of testing distribution, vary seed, 30 total (20 if really slow)
     if check_confidence and X_test.size > 0:
         model1_results = []
         model2_results = []
-        for rs in np.random.randint(0, 1000, 10):
-            np.random.seed(rs)
-            model1 = linear_model(X_train, y_train, rs=rs, tune=False)
-            model1_results.append(log_loss(y_test, model1.predict_proba(X_test)[:, 1]))
-            model2 = neural_network_model(X_train, y_train, rs=rs, tune=False)
-            model2_results.append(log_loss(y_test, model2.predict_proba(X_test)[:, 1]))
+        for predict_year in [2014, 2015, 2016, 2017, 2018]:
+            _, future_games = possible_tourney_matchups(predict_year)
+            X_train, X_test, X_predict, y_train, y_test, _ = prepare_data(games, future_games, start_day, start_year, predict_year)
+            for rs in np.random.randint(0, 1000, 6):
+                np.random.seed(rs)
+                model1 = linear_model(X_train, y_train, rs=rs, tune=False)
+                model1_results.append(log_loss(y_test, model1.predict_proba(X_test)[:, 1]))
+                model2 = neural_network_model(X_train, y_train, rs=rs, tune=False)
+                model2_results.append(log_loss(y_test, model2.predict_proba(X_test)[:, 1]))
+        # rough bootstrap with 30 samples
         print('Models are significantly different: ', significance_test(model1_results, model2_results))
         print('Effect size: ', effect_size(model1_results, model2_results))
+        print('%d samples out of %f needed to see effect' % (len(model1_results)), statistical_power())
         print('95 percent confidence intervals for model 1: ', confidence_intervals(model1_results))
         print('95 percent confidence intervals for model 2: ', confidence_intervals(model2_results))
         lower, upper = confidence_intervals(np.mean(np.array([model1_results, model2_results]), axis=0))
         print('95 percent confidence intervals for average: %f - %f' % (lower, upper))
-    
-    #TODO
+
     if explain_features and X_test.size > 0:
+        #print('Feature list:\n', ['%i:%s' % (i, features.columns[i]) for i in range(0, len(features.columns))])
         for model in models:
             explainer = shap.KernelExplainer(model.predict_proba, X_train, link="logit") # game theoretic approach
             shap_values = explainer.shap_values(X_test, nsamples=100)
-            shap.force_plot(explainer.expected_value[0], shap_values[0][0,:], X_test.iloc[0,:], link="logit")
+            shap.force_plot(explainer.expected_value[0], shap_values[0][0, :], X_test.iloc[0, :], link="logit")
             shap.force_plot(explainer.expected_value[0], shap_values[0], X_test, link="logit")
 
     if run_simulations:

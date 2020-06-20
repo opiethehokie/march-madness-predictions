@@ -1,4 +1,4 @@
-#   Copyright 2016-2019 Michael Peters
+#   Copyright 2016-2020 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -96,10 +96,8 @@ def effect_size(vals1, vals2):
     p = _t_test(vals1, vals2) if _normal(vals1) and _normal(vals2) else _ks_test(vals1, vals2)
     return abs(norm.ppf(p)) / sqrt(len(vals1))
 
-#TODO
 # probability of true positive (only useful when null hypothesis rejected), used to estimate min sample size
-def power():
+# defaults 20% chance of type II error, 5% chance type I error
+def statistical_power(effect=.8, power=.8, alpha=.05):
     analysis = TTestIndPower()
-    return analysis.solve_power(.8, power=.8, nobs1=None, ratio=1.0, alpha=.05) # 20% chance of type II error, 5% chance type I error
-
-
+    return analysis.solve_power(effect, power=power, nobs1=None, ratio=1.0, alpha=alpha)

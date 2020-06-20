@@ -1,4 +1,4 @@
-#   Copyright 2016-2019 Michael Peters
+#   Copyright 2016-2020 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -14,24 +14,24 @@
 
 
 #from autosklearn.classification import AutoSklearnClassifier
+from gplearn.genetic import SymbolicClassifier
 from eli5.sklearn.permutation_importance import PermutationImportance
 from eli5 import transform_feature_names
 from feature_engine.discretisers import EqualFrequencyDiscretiser, EqualWidthDiscretiser
-from mlxtend.classifier import StackingCVClassifier
+from mlxtend.classifier import EnsembleVoteClassifier
 from mlxtend.feature_selection import ColumnSelector
-from sklearn.calibration import CalibratedClassifierCV
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectFromModel
+from sklearn.feature_selection import SelectFromModel, SelectKBest, f_classif, mutual_info_classif
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import make_scorer, log_loss
-from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, PowerTransformer
 from sklearn.svm import LinearSVC
 from skopt import BayesSearchCV
 from skopt.space import Real, Integer, Categorical
+from xgboost import XGBClassifier
 
 #import autosklearn.metrics
 
@@ -39,6 +39,8 @@ from skopt.space import Real, Integer, Categorical
 
 
 n_jobs = 4
+
+scoring = make_scorer(log_loss, greater_is_better=False, needs_proba=True)
 
 # include below until https://github.com/scikit-optimize/scikit-optimize/issues/718 is resolved
 #pylint: disable=function-redefined
@@ -73,6 +75,7 @@ def feature_names(transformer, in_names=None):
 def feature_names(transformer, in_names=None):
     return ['cluster' + str(i) for i in range(0, transformer.n_clusters)]
 
+
 @print_models
 def linear_model(X, y, cv=10, rs=42, tune=True):
     grid = {
@@ -80,46 +83,50 @@ def linear_model(X, y, cv=10, rs=42, tune=True):
         'engineering__cluster__n_clusters': Integer(2, 8),
         'selection__estimator__estimator__C': Real(1e-2, 1, prior='log-uniform'),
         'selection__threshold': Real(1e-4, 1e-2, prior='log-uniform'),
-        'classification__C': Real(1e-3, 1e-1, prior='log-uniform')
+        'classification__C': Real(1e-3, 1e-1, prior='log-uniform'),
+        'classification__penalty': Categorical(['l1', 'l2', 'elasticnet'])
     }
 
     sparse_features = LinearSVC(C=.1, random_state=rs, penalty='l1', dual=False, max_iter=10000)
-    feature_importances = PermutationImportance(sparse_features, cv=None, random_state=rs) #TODO comment how does this relate to SHAP?
+    feature_importances = PermutationImportance(sparse_features, cv=None, random_state=rs)
 
-    model = Pipeline(steps=[('preprocessing', StandardScaler()),
-                            #('preprocessing', PowerTransformer()), #TODO
-                            ('engineering', FeatureUnion([('cols', ColumnSelector(cols=[i for i in range(0, X.shape[1])])),
-                                                          # dimension reduction helps with multicollinearity
-                                                          ('pca', PCA(random_state=rs, n_components=2)),
+    model = Pipeline(steps=[('preprocessing', PowerTransformer()),
+                            ('engineering', FeatureUnion([('pca', PCA(random_state=rs, n_components=2)),
                                                           ('cluster', FeatureAgglomeration(n_clusters=2)),
-                                                          #TODO
-                                                          #('bins', EqualWidthDiscretiser(bins=10)),
-                                                          ('bins', EqualFrequencyDiscretiser(q=10))
+                                                          ('bin1', EqualFrequencyDiscretiser()),
+                                                          ('bin2', EqualWidthDiscretiser())
                                                          ])),
-                            #TODO correlation based feature selection ANOVA/Kendall
                             ('selection', SelectFromModel(feature_importances, threshold=.0005)), # mean decrease accuracy (MDA)
-                            # logistic regression shuffles which helps with autocorrelation
-                            ('classification', LogisticRegression(C=.001, random_state=rs, dual=False, solver='saga', penalty='l2', max_iter=10000)) #TODO l1 would do feature selection
+                            ('classification', LogisticRegression(C=.001, random_state=rs, dual=False, solver='saga', penalty='l2', max_iter=10000))
                            ])
 
     if tune:
-        scoring = make_scorer(log_loss, greater_is_better=False, needs_proba=True)
         model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
 
     model.fit(X, y)
     return model
 
-@print_models
-def mov_regression_model(X, y):
-    #TODO https://github.com/opiethehokie/march-madness-predictions/commit/569aedb0ae1dc44ec462add654671f49e0e7236a
-    #TODO mov should be capped
-    #TODO correlation based feature selection pearson/spearman
-    pass
 
 @print_models
-def tree_model(X, y):
-    #TODO xgboost
-    pass
+def tree_model(X, y, rs=42, tune=True):
+    grid = {
+        'selection__score_func': Categorical([f_classif, mutual_info_classif]),
+        'selection__k': Integer(4, 64),
+        'classification__max_depth': Integer(2, 8),
+        'classification__n_estimators': Integer(64, 512),
+        'classification__learning_rate': Real(1e-2, 1e0, prior='log-uniform')
+    }
+
+    model = Pipeline(steps=[('selection', SelectKBest(score_func=f_classif, k=10)),
+                            ('classification', XGBClassifier(objective='binary:logistic', random_state=rs))
+                           ])
+
+    if tune:
+        model = BayesSearchCV(model, grid, cv=5, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
+
+    model.fit(X, y)
+    return model
+
 
 # Linux only
 #def automl_model(X, y, rs=42, tune=True):
@@ -134,6 +141,7 @@ def tree_model(X, y):
 #    print(model.sprint_statistics())
 #    write_model(model, name)
 #    return model
+
 
 @print_models
 def neural_network_model(X, y, rs=42, tune=True):
@@ -156,34 +164,41 @@ def neural_network_model(X, y, rs=42, tune=True):
                            ])
 
     if tune:
-        scoring = make_scorer(log_loss, greater_is_better=False, needs_proba=True)
         model = BayesSearchCV(model, grid, cv=5, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
 
     model.fit(X, y)
     return model
 
-@print_models
-def genetic_model(X, y):
-    #TODO https://gplearn.readthedocs.io/en/stable/reference.html#symbolic-classifier
-    pass
 
 @print_models
-def stacked_model(X, y, rs=42):
-    clfs = [linear_model(X, y, rs=rs, tune=False),
-            neural_network_model(X, y, rs=rs, tune=False),
-           ]
-    #TODO try EnsembleVoteClassifier too, this could just be ensemble model
-    model = StackingCVClassifier(classifiers=clfs, use_features_in_secondary=False, use_probas=True,
-                                 meta_classifier=CalibratedClassifierCV(GaussianNB(), cv=5)) #TODO could this be bagged?
+def genetic_model(X, y, rs=42, tune=True):
+    grid = {
+        'selection__score_func': Categorical([f_classif, mutual_info_classif]),
+        'selection__k': Integer(4, 64),
+        'classification__population_size': Real(1e2, 1e4, prior='log-uniform'),
+        'classification__generations': Integer(16, 64),
+        'classification__tournament_size': Integer(16, 64)
+    }
+
+    model = Pipeline(steps=[('preprocessing', StandardScaler()),
+                            ('selection', SelectKBest(score_func=f_classif, k=10)),
+                            ('classification', SymbolicClassifier(random_state=rs))
+                           ])
+
+    if tune:
+        model = BayesSearchCV(model, grid, cv=5, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
+
     model.fit(X, y)
     return model
 
-@print_models
-def bagged_model(X, y):
-    #TODO https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.BaggingClassifier.html
-    pass
 
 @print_models
-def genetic_model(X, y):
-    #TODO https://gplearn.readthedocs.io/en/stable/reference.html#symbolic-classifier
-    pass
+def ensemble_model(X, y, rs=42):
+    clfs = [linear_model(X, y, rs=rs, tune=False),
+            neural_network_model(X, y, rs=rs, tune=False),
+            genetic_model(X, y, rs=rs, tune=False),
+            tree_model(X, y, rs=rs, tune=False)
+           ]
+    model = EnsembleVoteClassifier(clfs, voting='soft')
+    model.fit(X, y)
+    return model

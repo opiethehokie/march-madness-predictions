@@ -1,4 +1,4 @@
-#   Copyright 2016-2019 Michael Peters
+#   Copyright 2016-2020 Michael Peters
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ from sklearn.utils import resample
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import accuracy_score
 
-from ml2 import postprocessing
+from ml import postprocessing
 
 
 np.random.seed(42)
