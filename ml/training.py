@@ -17,20 +17,19 @@
 from gplearn.genetic import SymbolicClassifier
 from eli5.sklearn.permutation_importance import PermutationImportance
 from eli5 import transform_feature_names
-from feature_engine.discretisers import EqualFrequencyDiscretiser, EqualWidthDiscretiser
 from mlxtend.classifier import EnsembleVoteClassifier
 from mlxtend.feature_selection import ColumnSelector
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectFromModel, SelectKBest, f_classif, mutual_info_classif
+from sklearn.feature_selection import SelectFromModel, SelectKBest, VarianceThreshold
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import make_scorer, log_loss
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
-from sklearn.preprocessing import MinMaxScaler, StandardScaler, PowerTransformer
+from sklearn.preprocessing import MinMaxScaler, StandardScaler, PowerTransformer, KBinsDiscretizer
 from sklearn.svm import LinearSVC
 from skopt import BayesSearchCV
-from skopt.space import Real, Integer, Categorical
+from skopt.space import Real, Integer
 from xgboost import XGBClassifier
 
 #import autosklearn.metrics
@@ -42,11 +41,6 @@ n_jobs = 4
 
 scoring = make_scorer(log_loss, greater_is_better=False, needs_proba=True)
 
-# include below until https://github.com/scikit-optimize/scikit-optimize/issues/718 is resolved
-#pylint: disable=function-redefined
-class BayesSearchCV(BayesSearchCV):
-    def _run_search(self, _):
-        raise BaseException('Use newer skopt')
 
 def print_models(func):
     def printed_func(*args, **kwargs):
@@ -79,25 +73,24 @@ def feature_names(transformer, in_names=None):
 @print_models
 def linear_model(X, y, cv=10, rs=42, tune=True):
     grid = {
-        'engineering__pca__n_components': Integer(2, 8),
-        'engineering__cluster__n_clusters': Integer(2, 8),
-        'selection__estimator__estimator__C': Real(1e-2, 1, prior='log-uniform'),
-        'selection__threshold': Real(1e-4, 1e-2, prior='log-uniform'),
+        'engineering__pca__n_components': Integer(2, int(X.shape[1])),
+        'engineering__cluster__n_clusters': Integer(2, 20),
+        #'engineering__bin__encode': Categorical(['ordinal', 'onehot']),
+        'engineering__bin__n_bins': Integer(5, 10),
+        #'selection1__threshold': Real(0, .2),
+        'selection2__k': Integer(50, 100),
         'classification__C': Real(1e-3, 1e-1, prior='log-uniform'),
-        'classification__penalty': Categorical(['l1', 'l2', 'elasticnet'])
+        #'classification__penalty': Categorical(['l1', 'l2', 'elasticnet'])
     }
 
-    sparse_features = LinearSVC(C=.1, random_state=rs, penalty='l1', dual=False, max_iter=10000)
-    feature_importances = PermutationImportance(sparse_features, cv=None, random_state=rs)
-
     model = Pipeline(steps=[('preprocessing', PowerTransformer()),
-                            ('engineering', FeatureUnion([('pca', PCA(random_state=rs, n_components=2)),
-                                                          ('cluster', FeatureAgglomeration(n_clusters=2)),
-                                                          ('bin1', EqualFrequencyDiscretiser()),
-                                                          ('bin2', EqualWidthDiscretiser())
+                            ('engineering', FeatureUnion([('pca', PCA(random_state=rs, n_components=None)),
+                                                          ('cluster', FeatureAgglomeration(n_clusters=10)),
+                                                          ('bin', KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='uniform')),
                                                          ])),
-                            ('selection', SelectFromModel(feature_importances, threshold=.0005)), # mean decrease accuracy (MDA)
-                            ('classification', LogisticRegression(C=.001, random_state=rs, dual=False, solver='saga', penalty='l2', max_iter=10000))
+                            ('selection1', VarianceThreshold(threshold=0)),
+                            ('selection2', SelectKBest(k=75)),
+                            ('classification', LogisticRegression(C=.01, random_state=rs, solver='saga', penalty='l2', max_iter=10000))
                            ])
 
     if tune:
@@ -108,21 +101,27 @@ def linear_model(X, y, cv=10, rs=42, tune=True):
 
 
 @print_models
-def tree_model(X, y, rs=42, tune=True):
+def tree_model(X, y, cv=10, rs=42, tune=True):
     grid = {
-        'selection__score_func': Categorical([f_classif, mutual_info_classif]),
-        'selection__k': Integer(4, 64),
-        'classification__max_depth': Integer(2, 8),
-        'classification__n_estimators': Integer(64, 512),
-        'classification__learning_rate': Real(1e-2, 1e0, prior='log-uniform')
+        'selection__k': Integer(75, 125),
+        'classification__max_depth': Integer(3, 5),
+        'classification__min_child_weight': Integer(1, 3),
+        'classification__n_estimators': Integer(500, 1000),
+        'classification__learning_rate': Real(1e-2, 1e-1, prior='log-uniform'),
+        'classification__gamma': Real(0, .2),
+        'classification__subsample': Real(.8, 1),
+        'classification__colsample_bytree': Real(.6, .8),
+        'classification__reg_alpha': Real(1e-2, 1e1, prior='log-uniform')
     }
 
-    model = Pipeline(steps=[('selection', SelectKBest(score_func=f_classif, k=10)),
-                            ('classification', XGBClassifier(objective='binary:logistic', random_state=rs))
+    model = Pipeline(steps=[('selection', SelectKBest(k=100)),
+                            ('classification', XGBClassifier(objective='binary:logistic', random_state=rs, max_depth=5, learning_rate=.05,
+                                                             min_child_weight=1, n_estimators=500, gamma=0, subsample=1, colsample_bytree=.6,
+                                                             reg_alpha=.1))
                            ])
 
     if tune:
-        model = BayesSearchCV(model, grid, cv=5, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
+        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=128)
 
     model.fit(X, y)
     return model
@@ -144,49 +143,56 @@ def tree_model(X, y, rs=42, tune=True):
 
 
 @print_models
-def neural_network_model(X, y, rs=42, tune=True):
+def neural_network_model(X, y, cv=5, rs=42, tune=True):
     grid = {
-        'classification__activation': Categorical(['relu', 'tanh', 'logistic']),
-        'classification__hidden_layer_sizes': Categorical([(int(X.shape[0]/(X.shape[1]*10)),),
-                                                           (X.shape[1]+2,),
-                                                           (int((X.shape[1]+2)*.67),),
-                                                           (int((X.shape[1]+2)*.5),),
-                                                           (X.shape[1]+2, X.shape[1]+2),
-                                                           (X.shape[1]+2, int((X.shape[1]+2)*.5))
-                                                          ]),
+        #'classification__activation': Categorical(['relu', 'tanh', 'logistic']),
         'classification__alpha': Real(1e-6, 1e-2, prior='log-uniform'),
-        'classification__learning_rate_init': Real(1e-6, 1e-2, prior='log-uniform')
+        'classification__learning_rate_init': Real(1e-5, 1e-1, prior='log-uniform'),
+        'classification__batch_szie': Integer(200, 400)
     }
 
+    #hls = (int(X.shape[0]/(X.shape[1]*10)),)
+    #hls = (X.shape[1]+2,)
+    #hls = (int((X.shape[1]+2)*.67),)
+    hls = (int((X.shape[1]+2)*.5),)
+    #hls = (X.shape[1]+2, X.shape[1]+2)
+    #hls = (X.shape[1]+2, int((X.shape[1]+2)*.5))
+
     model = Pipeline(steps=[('preprocessing', MinMaxScaler()),
-                            ('classification', MLPClassifier(activation='tanh', alpha=.01, early_stopping=True, learning_rate_init=.01,
-                                                             hidden_layer_sizes=(34,), random_state=rs, max_iter=10000))
+                            ('classification', MLPClassifier(activation='relu', alpha=.0001, early_stopping=True, learning_rate_init=.001,
+                                                             hidden_layer_sizes=hls, random_state=rs, max_iter=10000, batch_size=300))
                            ])
 
     if tune:
-        model = BayesSearchCV(model, grid, cv=5, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
+        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
 
     model.fit(X, y)
     return model
 
 
 @print_models
-def genetic_model(X, y, rs=42, tune=True):
+def genetic_model(X, y, cv=5, rs=42, tune=True):
     grid = {
-        'selection__score_func': Categorical([f_classif, mutual_info_classif]),
-        'selection__k': Integer(4, 64),
-        'classification__population_size': Real(1e2, 1e4, prior='log-uniform'),
-        'classification__generations': Integer(16, 64),
-        'classification__tournament_size': Integer(16, 64)
+        'selection__estimator__estimator__C': Real(1e-2, 1, prior='log-uniform'),
+        #'selection__threshold': Real(1e-4, 1e-2, prior='log-uniform'),
+        'classification__population_size': Integer(500, 1000),
+        'classification__generations': Integer(10, 40),
+        'classification__tournament_size': Integer(20, 50),
+        'classification__p_crossover': Real(.8, .95)
     }
 
+    sparse_features = LinearSVC(C=.01, random_state=rs, penalty='l1', dual=False, max_iter=10000)
+    feature_importances = PermutationImportance(sparse_features, cv=None, random_state=rs)
+
     model = Pipeline(steps=[('preprocessing', StandardScaler()),
-                            ('selection', SelectKBest(score_func=f_classif, k=10)),
-                            ('classification', SymbolicClassifier(random_state=rs))
+                            ('selection', SelectFromModel(feature_importances, threshold=-.001)), # mean decrease accuracy (MDA)
+                            ('classification', SymbolicClassifier(random_state=rs, generations=10, population_size=500, tournament_size=20,
+                                                                  parsimony_coefficient='auto', p_crossover=.9,
+                                                                  function_set=('add', 'sub', 'div',)))
                            ])
 
     if tune:
-        model = BayesSearchCV(model, grid, cv=5, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
+        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
 
     model.fit(X, y)
     return model

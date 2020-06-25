@@ -53,11 +53,11 @@ if __name__ == '__main__':
 
     # ML
 
-    models = [linear_model(X_train, y_train, cv, random_state, tune=True),
-              neural_network_model(X_train, y_train, random_state, tune=False),
-              tree_model(X_train, y_train, random_state, tune=True),
-              genetic_model(X_train, y_train, random_state, tune=True),
-              ensemble_model(X_train, y_train, random_state)
+    models = [linear_model(X_train, y_train, cv, random_state, tune=False),
+              #neural_network_model(X_train, y_train, cv, random_state, tune=False),
+              #tree_model(X_train, y_train, cv, random_state, tune=False),
+              #genetic_model(X_train, y_train, cv, random_state, tune=False),
+              #ensemble_model(X_train, y_train, random_state)
              ]
 
     if X_test.size > 0:

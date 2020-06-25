@@ -13,9 +13,10 @@
 #   limitations under the License.
 
 
-import feature_engine
 import numpy as np
 import pandas as pd
+
+from feature_engine.outlier_removers import OutlierTrimmer
 
 from db.cache import read_features, write_features, features_exist
 from ml.aggregators import modified_rpi, statistics, custom_ratings, vanilla_stats, time_series_stats, descriptive_stats, elo
@@ -28,7 +29,7 @@ TOURNEY_START_DAY = 134
 # cleaning
 
 def filter_outlier_games(data, m=5):
-    return feature_engine.outlier_removers.OutlierTrimmer(distribution='gaussian', fold=m, tail='both').fit_transform(data)
+    return OutlierTrimmer(distribution='gaussian', fold=m, tail='both').fit_transform(data)
 
 def filter_overtime_games(data):
     return data[data['Numot'] == 0]
@@ -48,7 +49,7 @@ def filter_out_of_window_games(data, features, sday, syear, eyear):
 
 # sampling
 
-def oversample_neutral_site_games(data, factor=3):
+def oversample_neutral_site_games(data, factor=2):
     data = data.copy()
     neutral_site_games = data[(data.Wloc == 'N') & (data.Daynum < TOURNEY_START_DAY)]
     return data.append([neutral_site_games]*factor, ignore_index=True)
@@ -139,7 +140,7 @@ def extract_features(data, start_day):
 # ETL
 
 def prepare_data(games, future_games, start_day, start_year, predict_year):
-    print('Analyzing %d games' % len(games))
+    #print('Analyzing %d games' % len(games))
     games = filter_overtime_games(games)
     games = filter_outlier_games(games)
     games = oversample_neutral_site_games(games)
@@ -147,7 +148,7 @@ def prepare_data(games, future_games, start_day, start_year, predict_year):
     games = fill_missing_stats(games)
     features = extract_features(games, start_day)
     games, features = filter_out_of_window_games(games, features, start_day, start_year, predict_year)
-    print('Training on %d games, %d' % (games.shape[0], features.shape[1]))
+    #print('Training on %d games, %d features' % (games.shape[0], features.shape[1]))
     assert games.shape[0] == features.shape[0]
     X_train, X_test, X_predict, y_train, y_test, cv = custom_train_test_split(games, features, predict_year)
     assert X_train.shape[0] == y_train.shape[0]
