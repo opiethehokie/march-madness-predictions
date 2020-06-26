@@ -83,10 +83,10 @@ if __name__ == '__main__':
     if check_confidence and X_test.size > 0:
         model1_results = []
         model2_results = []
-        for predict_year in [2014, 2015, 2016, 2017, 2018]:
+        for predict_year in [2015, 2016, 2017, 2018]:
             _, future_games = possible_tourney_matchups(predict_year)
             X_train, X_test, X_predict, y_train, y_test, _ = prepare_data(games, future_games, start_day, start_year, predict_year)
-            for rs in np.random.randint(0, 1000, 6):
+            for rs in np.random.randint(0, 1000, 7):
                 np.random.seed(rs)
                 model1 = linear_model(X_train, y_train, rs=rs, tune=False)
                 model1_results.append(log_loss(y_test, model1.predict_proba(X_test)[:, 1]))
@@ -95,7 +95,7 @@ if __name__ == '__main__':
         # rough bootstrap with 30 samples
         print('Models are significantly different: ', significance_test(model1_results, model2_results))
         print('Effect size: ', effect_size(model1_results, model2_results))
-        print('%d samples out of %f needed to see effect' % (len(model1_results)), statistical_power())
+        print('%d samples out of %f needed to see effect' % (len(model1_results), statistical_power()))
         print('95 percent confidence intervals for model 1: ', confidence_intervals(model1_results))
         print('95 percent confidence intervals for model 2: ', confidence_intervals(model2_results))
         lower, upper = confidence_intervals(np.mean(np.array([model1_results, model2_results]), axis=0))
@@ -104,10 +104,10 @@ if __name__ == '__main__':
     if explain_features and X_test.size > 0:
         #print('Feature list:\n', ['%i:%s' % (i, features.columns[i]) for i in range(0, len(features.columns))])
         for model in models:
-            explainer = shap.KernelExplainer(model.predict_proba, X_train, link="logit") # game theoretic approach
+            explainer = shap.KernelExplainer(model.predict_proba, shap.sample(X_train, 100), link="logit") # game theoretic approach
             shap_values = explainer.shap_values(X_test, nsamples=100)
-            shap.force_plot(explainer.expected_value[0], shap_values[0][0, :], X_test.iloc[0, :], link="logit")
-            shap.force_plot(explainer.expected_value[0], shap_values[0], X_test, link="logit")
+            shap.force_plot(explainer.expected_value[0], shap_values[0][0, :], X_test[0, :], link="logit", matplotlib=True, show=True)
+            shap.force_plot(explainer.expected_value[0], shap_values[0], X_test, link="logit", show=True)
 
     if run_simulations:
         simulate_tourney(team_id_mapping(), read_predictions(), predict_year)
