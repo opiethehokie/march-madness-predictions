@@ -149,6 +149,7 @@ def prepare_data(games, future_games, start_day, start_year, predict_year):
     features = extract_features(games, start_day)
     games, features = filter_out_of_window_games(games, features, start_day, start_year, predict_year)
     #print('Training on %d games, %d features' % (games.shape[0], features.shape[1]))
+    #print('Feature list:\n', ['%i:%s' % (i, features.columns[i]) for i in range(0, len(features.columns))])
     assert games.shape[0] == features.shape[0]
     X_train, X_test, X_predict, y_train, y_test, cv = custom_train_test_split(games, features, predict_year)
     assert X_train.shape[0] == y_train.shape[0]

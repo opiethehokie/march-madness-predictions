@@ -23,7 +23,7 @@ from sklearn.metrics import log_loss, roc_curve, confusion_matrix, auc, accuracy
 
 from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
                        championship_pairings, possible_tourney_matchups)
-from ml.training import ensemble_model, linear_model, tree_model, genetic_model, neural_network_model
+from ml.training import stacked_model, linear_model, tree_model, genetic_model, neural_network_model
 from ml.wrangling import prepare_data
 from ml.postprocessing import (override_final_predictions, average_predictions, average_prediction_probas, significance_test,
                                confidence_intervals, effect_size, statistical_power)
@@ -41,10 +41,10 @@ if __name__ == '__main__':
 
     start_year = 2009
     start_day = 60
-    check_confidence = True
+    check_confidence = False
     save_predictions = True
     run_simulations = True
-    explain_features = True
+    explain_features = False
 
     games = game_data()
     predict_matchups, future_games = possible_tourney_matchups(predict_year)
@@ -53,11 +53,11 @@ if __name__ == '__main__':
 
     # ML
 
-    models = [linear_model(X_train, y_train, cv, random_state, tune=False),
+    models = [#linear_model(X_train, y_train, cv, random_state, tune=False),
               #neural_network_model(X_train, y_train, cv, random_state, tune=False),
               #tree_model(X_train, y_train, cv, random_state, tune=False),
               #genetic_model(X_train, y_train, cv, random_state, tune=False),
-              #ensemble_model(X_train, y_train, random_state)
+              stacked_model(X_train, y_train, random_state)
              ]
 
     if X_test.size > 0:
@@ -90,9 +90,9 @@ if __name__ == '__main__':
                 np.random.seed(rs)
                 model1 = linear_model(X_train, y_train, rs=rs, tune=False)
                 model1_results.append(log_loss(y_test, model1.predict_proba(X_test)[:, 1]))
-                model2 = neural_network_model(X_train, y_train, rs=rs, tune=False)
+                model2 = tree_model(X_train, y_train, random_state)
                 model2_results.append(log_loss(y_test, model2.predict_proba(X_test)[:, 1]))
-        # rough bootstrap with 30 samples
+        # rough bootstrap with approx 30 samples
         print('Models are significantly different: ', significance_test(model1_results, model2_results))
         print('Effect size: ', effect_size(model1_results, model2_results))
         print('%d samples out of %f needed to see effect' % (len(model1_results), statistical_power()))
@@ -102,12 +102,11 @@ if __name__ == '__main__':
         print('95 percent confidence intervals for average: %f - %f' % (lower, upper))
 
     if explain_features and X_test.size > 0:
-        #print('Feature list:\n', ['%i:%s' % (i, features.columns[i]) for i in range(0, len(features.columns))])
         for model in models:
-            explainer = shap.KernelExplainer(model.predict_proba, shap.sample(X_train, 100), link="logit") # game theoretic approach
-            shap_values = explainer.shap_values(X_test, nsamples=100)
-            shap.force_plot(explainer.expected_value[0], shap_values[0][0, :], X_test[0, :], link="logit", matplotlib=True, show=True)
-            shap.force_plot(explainer.expected_value[0], shap_values[0], X_test, link="logit", show=True)
+            # game theoretic approach to global interpretability
+            explainer = shap.KernelExplainer(model.predict_proba, shap.sample(X_train, 10))
+            shap_values = explainer.shap_values(X_test)
+            shap.summary_plot(shap_values)
 
     if run_simulations:
         simulate_tourney(team_id_mapping(), read_predictions(), predict_year)

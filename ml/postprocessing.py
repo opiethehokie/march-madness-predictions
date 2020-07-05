@@ -42,7 +42,7 @@ def mov_to_win_percent(u, m=11, offset=0):
     u = u + offset
     return 1 - norm.cdf(0.5, loc=u, scale=m) + .5 * (norm.cdf(0.5, loc=u, scale=m) - norm.cdf(-0.5, loc=u, scale=m))
 
-def average_prediction_probas(models, X, low_clip=.05, high_clip=.95):
+def average_prediction_probas(models, X, low_clip=.025, high_clip=.975):
     predictions = []
     for model in models:
         predictions.append(model.predict_proba(X)[:, 1])

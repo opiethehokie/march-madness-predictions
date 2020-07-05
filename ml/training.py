@@ -13,11 +13,10 @@
 #   limitations under the License.
 
 
-#from autosklearn.classification import AutoSklearnClassifier
 from gplearn.genetic import SymbolicClassifier
 from eli5.sklearn.permutation_importance import PermutationImportance
 from eli5 import transform_feature_names
-from mlxtend.classifier import EnsembleVoteClassifier
+from mlxtend.classifier import StackingCVClassifier
 from mlxtend.feature_selection import ColumnSelector
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
@@ -31,10 +30,6 @@ from sklearn.svm import LinearSVC
 from skopt import BayesSearchCV
 from skopt.space import Real, Integer
 from xgboost import XGBClassifier
-
-#import autosklearn.metrics
-
-#from db.cache import read_model, write_model, model_exists
 
 
 n_jobs = 4
@@ -71,7 +66,7 @@ def feature_names(transformer, in_names=None):
 
 
 @print_models
-def linear_model(X, y, cv=10, rs=42, tune=True):
+def linear_model(X, y, cv=10, rs=42, tune=True, fit=True):
     grid = {
         'engineering__pca__n_components': Integer(2, int(X.shape[1])),
         'engineering__cluster__n_clusters': Integer(2, 20),
@@ -95,13 +90,13 @@ def linear_model(X, y, cv=10, rs=42, tune=True):
 
     if tune:
         model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
-
-    model.fit(X, y)
+    if fit:
+        model.fit(X, y)
     return model
 
 
 @print_models
-def tree_model(X, y, cv=10, rs=42, tune=True):
+def tree_model(X, y, cv=10, rs=42, tune=True, fit=True):
     grid = {
         'selection__k': Integer(75, 125),
         'classification__max_depth': Integer(3, 5),
@@ -122,28 +117,13 @@ def tree_model(X, y, cv=10, rs=42, tune=True):
 
     if tune:
         model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=128)
-
-    model.fit(X, y)
+    if fit:
+        model.fit(X, y)
     return model
 
 
-# Linux only
-#def automl_model(X, y, rs=42, tune=True):
-#    name = 'auto'
-#    if model_exists(name) and not tune:
-#        return read_model(name)
-#    model = AutoSklearnClassifier(time_left_for_this_task=60*60*8, per_run_time_limit=60*15, seed=rs, resampling_strategy='cv',
-#                                  resampling_strategy_arguments={'folds': 5})
-#    model.fit(X.copy(), y.copy(), metric=autosklearn.metrics.log_loss)
-#    model.refit(X.copy(), y.copy())
-#    print(model.show_models())
-#    print(model.sprint_statistics())
-#    write_model(model, name)
-#    return model
-
-
 @print_models
-def neural_network_model(X, y, cv=5, rs=42, tune=True):
+def neural_network_model(X, y, cv=5, rs=42, tune=True, fit=True):
     grid = {
         #'classification__activation': Categorical(['relu', 'tanh', 'logistic']),
         'classification__alpha': Real(1e-6, 1e-2, prior='log-uniform'),
@@ -165,13 +145,13 @@ def neural_network_model(X, y, cv=5, rs=42, tune=True):
 
     if tune:
         model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
-
-    model.fit(X, y)
+    if fit:
+        model.fit(X, y)
     return model
 
 
 @print_models
-def genetic_model(X, y, cv=5, rs=42, tune=True):
+def genetic_model(X, y, cv=5, rs=42, tune=True, fit=True):
     grid = {
         'selection__estimator__estimator__C': Real(1e-2, 1, prior='log-uniform'),
         #'selection__threshold': Real(1e-4, 1e-2, prior='log-uniform'),
@@ -188,23 +168,25 @@ def genetic_model(X, y, cv=5, rs=42, tune=True):
                             ('selection', SelectFromModel(feature_importances, threshold=-.001)), # mean decrease accuracy (MDA)
                             ('classification', SymbolicClassifier(random_state=rs, generations=10, population_size=500, tournament_size=20,
                                                                   parsimony_coefficient='auto', p_crossover=.9,
-                                                                  function_set=('add', 'sub', 'div',)))
+                                                                  function_set=('add', 'sub', 'mul', 'div',)))
                            ])
 
     if tune:
-        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
-
-    model.fit(X, y)
+        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=128)
+    if fit:
+        model.fit(X, y)
     return model
 
 
 @print_models
-def ensemble_model(X, y, rs=42):
-    clfs = [linear_model(X, y, rs=rs, tune=False),
-            neural_network_model(X, y, rs=rs, tune=False),
-            genetic_model(X, y, rs=rs, tune=False),
-            tree_model(X, y, rs=rs, tune=False)
+def stacked_model(X, y, cv=2, rs=42):
+    clfs = [linear_model(X, y, rs=rs, tune=False, fit=False),
+            neural_network_model(X, y, rs=rs, tune=False, fit=False),
+            #genetic_model(X, y, rs=rs, tune=False, fit=False),
+            tree_model(X, y, rs=rs, tune=False, fit=False)
            ]
-    model = EnsembleVoteClassifier(clfs, voting='soft')
+    mclf = LogisticRegression(penalty='l2', random_state=rs, C=.1, solver='saga')
+    model = StackingCVClassifier(classifiers=clfs, use_probas=True, use_features_in_secondary=False, meta_classifier=mclf,
+                                 random_state=rs, cv=cv, n_jobs=n_jobs)
     model.fit(X, y)
     return model
