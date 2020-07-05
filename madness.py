@@ -23,7 +23,7 @@ from sklearn.metrics import log_loss, roc_curve, confusion_matrix, auc, accuracy
 
 from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
                        championship_pairings, possible_tourney_matchups)
-from ml.training import stacked_model, linear_model, tree_model, genetic_model, neural_network_model
+from ml.training import stacked_model, linear_model, tree_model, neural_network_model
 from ml.wrangling import prepare_data
 from ml.postprocessing import (override_final_predictions, average_predictions, average_prediction_probas, significance_test,
                                confidence_intervals, effect_size, statistical_power)

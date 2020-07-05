@@ -9,6 +9,7 @@ min-similarity-lines=5
 [FORMAT]
 
 max-line-length=150
+max-args=6
 
 [MISCELLANEOUS]
 

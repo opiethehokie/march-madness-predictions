@@ -77,6 +77,7 @@ dependencies:
   - prompt-toolkit=3.0.5=py_1
   - psutil=5.7.0=py38h9de7a3e_1
   - py=1.9.0=pyh9f0ad1d_0
+  - pyaml=20.4.0=pyh9f0ad1d_0
   - pygments=2.6.1=py_0
   - pylint=2.4.4=py38_0
   - pyparsing=2.4.7=pyh9f0ad1d_0
@@ -88,6 +89,7 @@ dependencies:
   - pywavelets=1.1.1=py38h40bdaab_1
   - scikit-image=0.17.2=py38he6e81aa_1
   - scikit-learn=0.22.2.post1=py38h7208079_0
+  - scikit-optimize=0.7.4=py_0
   - setuptools=49.1.0=py38h32f6830_0
   - shap=0.35.0=py38he6e81aa_0
   - six=1.15.0=pyh9f0ad1d_0
@@ -117,7 +119,6 @@ dependencies:
   - zstd=1.4.4=h9f78265_3
   - pip:
     - feature-engine==0.4.31
-    - gplearn==0.4.1
     - numpy==1.18.4
     - pyyaml==5.3.1
     - scipy==1.4.1
