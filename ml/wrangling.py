@@ -19,7 +19,7 @@ import pandas as pd
 from feature_engine.outlier_removers import OutlierTrimmer
 
 from db.cache import read_features, write_features, features_exist
-from ml.aggregators import modified_rpi, statistics, custom_ratings, vanilla_stats, time_series_stats, descriptive_stats, elo
+from ml.aggregators import modified_rpi, statistics, custom_ratings, time_series_stats, descriptive_stats, elo
 from ratings.off_def import adjust_stats
 from ratings.markov import markov_stats
 
@@ -105,13 +105,11 @@ def _construct_sos(data, start_day, bust_cache=False):
 def _construct_stats(data, start_day, bust_cache=False):
     if features_exist('stats') and not bust_cache:
         return read_features('stats')
-    stats1 = pd.DataFrame(statistics(data, start_day, vanilla_stats))
-    stats1.columns = ['stat%s' % i for i in range(1, np.size(stats1, 1) + 1)]
-    stats2 = pd.DataFrame(statistics(data, start_day, descriptive_stats))
-    stats2.columns = ['descstat%s' % i for i in range(1, np.size(stats2, 1) + 1)]
-    stats3 = pd.DataFrame(statistics(data, start_day, time_series_stats))
-    stats3.columns = ['timeseriesstat%s' % i for i in range(1, np.size(stats3, 1) + 1)]
-    stats = pd.concat([stats1, stats2, stats3], axis=1)
+    stats1 = pd.DataFrame(statistics(data, start_day, descriptive_stats))
+    stats1.columns = ['desc-stat%s' % i for i in range(1, np.size(stats1, 1) + 1)]
+    stats2 = pd.DataFrame(statistics(data, start_day, time_series_stats))
+    stats2.columns = ['time-series-stat%s' % i for i in range(1, np.size(stats2, 1) + 1)]
+    stats = pd.concat([stats1, stats2], axis=1)
     write_features(stats, 'stats')
     return stats
 

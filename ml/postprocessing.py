@@ -51,7 +51,7 @@ def average_prediction_probas(models, X, low_clip=.025, high_clip=.975):
 def average_predictions(models, X):
     predictions = []
     for model in models:
-        predictions.append(model.predict(X))
+        predictions.append(np.reshape(model.predict(X), (X.shape[0])))
     return np.rint(np.mean(np.array(predictions), axis=0))
 
 # https://machinelearningmastery.com/use-statistical-significance-tests-interpret-machine-learning-results/

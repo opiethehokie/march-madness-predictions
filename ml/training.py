@@ -16,14 +16,19 @@
 from mlxtend.classifier import StackingCVClassifier
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest, VarianceThreshold
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.feature_selection import SelectKBest
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import make_scorer, log_loss
-from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import MinMaxScaler, PowerTransformer, KBinsDiscretizer
-from skopt import BayesSearchCV
-from skopt.space import Real, Integer
+from skopt.searchcv import BayesSearchCV
+from skopt.space import Real, Integer, Categorical
+from keras.callbacks import EarlyStopping
+from keras.models import Sequential
+from keras.layers import Dense, Dropout
+from keras.regularizers import l2
+from keras.wrappers.scikit_learn import KerasClassifier
 from xgboost import XGBClassifier
 
 
@@ -53,12 +58,8 @@ def linear_model(X, y, cv=10, rs=42, tune=True, fit=True):
     grid = {
         'engineering__pca__n_components': Integer(2, int(X.shape[1])),
         'engineering__cluster__n_clusters': Integer(2, 20),
-        #'engineering__bin__encode': Categorical(['ordinal', 'onehot']),
         'engineering__bin__n_bins': Integer(5, 10),
-        #'selection1__threshold': Real(0, .2),
-        'selection2__k': Integer(50, 100),
         'classification__C': Real(1e-3, 1e-1, prior='log-uniform'),
-        #'classification__penalty': Categorical(['l1', 'l2', 'elasticnet'])
     }
 
     model = Pipeline(steps=[('preprocessing', PowerTransformer()),
@@ -66,9 +67,8 @@ def linear_model(X, y, cv=10, rs=42, tune=True, fit=True):
                                                           ('cluster', FeatureAgglomeration(n_clusters=10)),
                                                           ('bin', KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='uniform')),
                                                          ])),
-                            ('selection1', VarianceThreshold(threshold=0)),
-                            ('selection2', SelectKBest(k=75)),
-                            ('classification', LogisticRegression(C=.01, random_state=rs, solver='saga', penalty='l2', max_iter=10000))
+                            ('selection', SelectKBest(k=75)),
+                            ('classification', LogisticRegression(C=.1, random_state=rs, solver='saga', penalty='l2', max_iter=10000))
                            ])
 
     if tune:
@@ -79,23 +79,23 @@ def linear_model(X, y, cv=10, rs=42, tune=True, fit=True):
 
 
 @print_models
-def tree_model(X, y, cv=10, rs=42, tune=True, fit=True):
+def boosting_model(X, y, cv=10, rs=42, tune=True, fit=True):
     grid = {
         'selection__k': Integer(75, 125),
         'classification__max_depth': Integer(3, 5),
         'classification__min_child_weight': Integer(1, 3),
         'classification__n_estimators': Integer(500, 1000),
-        'classification__learning_rate': Real(1e-2, 1e-1, prior='log-uniform'),
-        'classification__gamma': Real(0, .2),
-        'classification__subsample': Real(.8, 1),
-        'classification__colsample_bytree': Real(.6, .8),
-        'classification__reg_alpha': Real(1e-2, 1e1, prior='log-uniform')
+        'classification__learning_rate': Real(1e-2, 1e-1, prior='log-uniform'), # eta
+        'classification__reg_alpha': Real(1e-2, 1, prior='log-uniform'), # l1
+        'classification__reg_lambda': Real(1e-2, 1, prior='log-uniform'), # l2
+        'classification__booster': Categorical(['gbtree', 'dart', 'gblinear']),
+        'classification__importance_type': Categorical(['gain', 'weight', 'cover', 'total_gain', 'total_cover'])
     }
 
     model = Pipeline(steps=[('selection', SelectKBest(k=100)),
                             ('classification', XGBClassifier(objective='binary:logistic', random_state=rs, max_depth=5, learning_rate=.05,
                                                              min_child_weight=1, n_estimators=500, gamma=0, subsample=1, colsample_bytree=.6,
-                                                             reg_alpha=.1))
+                                                             reg_alpha=1, reg_lambda=1))
                            ])
 
     if tune:
@@ -108,26 +108,54 @@ def tree_model(X, y, cv=10, rs=42, tune=True, fit=True):
 @print_models
 def neural_network_model(X, y, cv=5, rs=42, tune=True, fit=True):
     grid = {
-        #'classification__activation': Categorical(['relu', 'tanh', 'logistic']),
-        'classification__alpha': Real(1e-6, 1e-2, prior='log-uniform'),
-        'classification__learning_rate_init': Real(1e-5, 1e-1, prior='log-uniform'),
-        'classification__batch_szie': Integer(200, 400)
+        'selection__threshold': Categorical(['mean', 'median']),
+        'classification__batch_size': Integer(64, 256, prior='log-uniform', base=2),
+        'classification__drop': Real(.1, .5),
+        'classification__opt': Categorical(['adam', 'adagrad']),
+        'classification__act': Categorical(['tanh', 'relu']),
+        'classification__reg': Real(1e-5, 1e-4, prior='log-uniform'),
+        'classification__hls': Integer(int(X.shape[1]/4), X.shape[1]*2)
     }
 
-    #hls = (int(X.shape[0]/(X.shape[1]*10)),)
-    #hls = (X.shape[1]+2,)
-    #hls = (int((X.shape[1]+2)*.67),)
-    hls = (int((X.shape[1]+2)*.5),)
-    #hls = (X.shape[1]+2, X.shape[1]+2)
-    #hls = (X.shape[1]+2, int((X.shape[1]+2)*.5))
+    def create_mlp(init='normal', drop=.1, opt='adam', act='relu', reg=1e-4, hls=64):
+        mlp = Sequential()
+        mlp.add(Dense(hls, activation=act, kernel_initializer=init, activity_regularizer=l2(reg)))
+        mlp.add(Dropout(drop, seed=rs))
+        mlp.add(Dense(1, activation='sigmoid'))
+        mlp.compile(loss='binary_crossentropy', optimizer=opt, metrics=[])
+        return mlp
+
+    callback = EarlyStopping(monitor='loss', patience=10)
 
     model = Pipeline(steps=[('preprocessing', MinMaxScaler()),
-                            ('classification', MLPClassifier(activation='relu', alpha=.0001, early_stopping=True, learning_rate_init=.001,
-                                                             hidden_layer_sizes=hls, random_state=rs, max_iter=10000, batch_size=300))
+                            ('classification', KerasClassifier(build_fn=create_mlp, epochs=500, batch_size=256, verbose=0))
                            ])
 
     if tune:
-        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
+        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=1, random_state=rs, n_iter=32,
+                              fit_params=dict(classification__callbacks=[callback]))
+        if fit:
+            model.fit(X, y)
+    else:
+        if fit:
+            model.fit(X, y, classification__callbacks=[callback])
+    return model
+
+
+@print_models
+def bayesian_model(X, y, cv=5, rs=42, tune=True, fit=True):
+    grid = {
+        'selection__k': Integer(25, X.shape[1]),
+        'classification__solver': Categorical(['lsqr', 'eigen']),
+        'classification__shrinkage': Categorical([None, 'auto'])
+    }
+
+    model = Pipeline(steps=[('selection', SelectKBest(k=50)),
+                            ('classification', LinearDiscriminantAnalysis(solver='svd'))
+                           ])
+
+    if tune:
+        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=32)
     if fit:
         model.fit(X, y)
     return model
@@ -137,10 +165,11 @@ def neural_network_model(X, y, cv=5, rs=42, tune=True, fit=True):
 def stacked_model(X, y, cv=2, rs=42):
     clfs = [linear_model(X, y, rs=rs, tune=False, fit=False),
             neural_network_model(X, y, rs=rs, tune=False, fit=False),
-            tree_model(X, y, rs=rs, tune=False, fit=False)
+            boosting_model(X, y, rs=rs, tune=False, fit=False),
+            bayesian_model(X, y, rs=rs, tune=False, fit=False)
            ]
-    mclf = LogisticRegression(penalty='l2', random_state=rs, C=.1, solver='saga')
+    mclf = LogisticRegression(penalty='l2', random_state=rs, C=.01, solver='saga')
     model = StackingCVClassifier(classifiers=clfs, use_probas=True, use_features_in_secondary=False, meta_classifier=mclf,
-                                 random_state=rs, cv=cv, n_jobs=n_jobs)
+                                 random_state=rs, cv=cv, n_jobs=1)
     model.fit(X, y)
     return model

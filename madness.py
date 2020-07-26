@@ -23,7 +23,7 @@ from sklearn.metrics import log_loss, roc_curve, confusion_matrix, auc, accuracy
 
 from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
                        championship_pairings, possible_tourney_matchups)
-from ml.training import stacked_model, linear_model, tree_model, neural_network_model
+from ml.training import stacked_model, linear_model, boosting_model, neural_network_model, bayesian_model
 from ml.wrangling import prepare_data
 from ml.postprocessing import (override_final_predictions, average_predictions, average_prediction_probas, significance_test,
                                confidence_intervals, effect_size, statistical_power)
@@ -41,10 +41,10 @@ if __name__ == '__main__':
 
     start_year = 2009
     start_day = 60
-    check_confidence = False
+    check_confidence = True
     save_predictions = True
     run_simulations = True
-    explain_features = False
+    explain_features = True
 
     games = game_data()
     predict_matchups, future_games = possible_tourney_matchups(predict_year)
@@ -55,9 +55,9 @@ if __name__ == '__main__':
 
     models = [#linear_model(X_train, y_train, cv, random_state, tune=False),
               #neural_network_model(X_train, y_train, cv, random_state, tune=False),
-              #tree_model(X_train, y_train, cv, random_state, tune=False),
-              #genetic_model(X_train, y_train, cv, random_state, tune=False),
-              stacked_model(X_train, y_train, random_state)
+              #boosting_model(X_train, y_train, cv, random_state, tune=False),
+              #bayesian_model(X_train, y_train, cv, random_state, tune=False),
+              stacked_model(X_train, y_train, rs=random_state)
              ]
 
     if X_test.size > 0:
@@ -90,7 +90,7 @@ if __name__ == '__main__':
                 np.random.seed(rs)
                 model1 = linear_model(X_train, y_train, rs=rs, tune=False)
                 model1_results.append(log_loss(y_test, model1.predict_proba(X_test)[:, 1]))
-                model2 = tree_model(X_train, y_train, random_state)
+                model2 = neural_network_model(X_train, y_train, rs=rs, tune=False)
                 model2_results.append(log_loss(y_test, model2.predict_proba(X_test)[:, 1]))
         # rough bootstrap with approx 30 samples
         print('Models are significantly different: ', significance_test(model1_results, model2_results))

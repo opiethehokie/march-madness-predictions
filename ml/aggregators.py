@@ -85,11 +85,11 @@ def descriptive_stats(results):
 def time_series_stats(results):
     timed = []
     for stat in results.keys():
-        timed.append(np.mean(results[stat][-1]))
+        timed.append(results[stat][-1])
         timed.append(np.mean(results[stat][-5:])) # simple 5 game moving average
-        mean = np.mean(results[stat])
-        timed.append(len(list(itertools.takewhile(lambda x, mean=mean: x > mean, reversed(results[stat]))))) # monotonicity
-        timed.append(len(list(itertools.takewhile(lambda x, mean=mean: x < mean, reversed(results[stat])))))
+        m = np.mean(results[stat])
+        timed.append(len(list(itertools.takewhile(lambda x, mean=m: x > mean, reversed(results[stat]))))) # monotonicity
+        timed.append(len(list(itertools.takewhile(lambda x, mean=m: x < mean, reversed(results[stat])))))
         if len(results[stat]) > 1:
             timed.append(SimpleExpSmoothing(results[stat]).fit(smoothing_level=.3, optimized=False).fittedvalues[-1]) # exponential smoothing
             timed.append(Holt(results[stat]).fit(smoothing_level=.5, smoothing_slope=.5, optimized=False).fittedvalues[-1]) # Holt's linear trend
@@ -97,12 +97,6 @@ def time_series_stats(results):
             timed.append(results[stat][0])
             timed.append(results[stat][0])
     return timed
-
-def vanilla_stats(results):
-    stats = []
-    for stat in results.keys():
-        stats.append(np.mean(results[stat]))
-    return stats
 
 def statistics(X, start_day, stat_F):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
