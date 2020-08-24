@@ -30,7 +30,7 @@ from ml.postprocessing import (override_final_predictions, average_predictions, 
 from simulations.bracket import simulate_tourney
 
 
-random_state = 42
+random_state = 4298
 random.seed(random_state)
 np.random.seed(random_state)
 
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     models = [#linear_model(X_train, y_train, cv, random_state, tune=False),
               #neural_network_model(X_train, y_train, cv, random_state, tune=False),
               #boosting_model(X_train, y_train, cv, random_state, tune=False),
-              #bayesian_model(X_train, y_train, cv, random_state, tune=False),
+              #bayesian_model(X_train, y_train, cv),
               stacked_model(X_train, y_train, rs=random_state)
              ]
 

@@ -13,21 +13,25 @@
 #   limitations under the License.
 
 
+import numpy as np
+
 from mlxtend.classifier import StackingCVClassifier
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.feature_selection import SelectKBest
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_selection import SelectKBest, SelectFromModel, RFECV
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import make_scorer, log_loss
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import MinMaxScaler, PowerTransformer, KBinsDiscretizer
+from sklearn.utils.class_weight import compute_class_weight
 from skopt.searchcv import BayesSearchCV
 from skopt.space import Real, Integer, Categorical
 from keras.callbacks import EarlyStopping
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
-from keras.regularizers import l2
+from keras.regularizers import l1_l2
 from keras.wrappers.scikit_learn import KerasClassifier
 from xgboost import XGBClassifier
 
@@ -59,6 +63,7 @@ def linear_model(X, y, cv=10, rs=42, tune=True, fit=True):
         'engineering__pca__n_components': Integer(2, int(X.shape[1])),
         'engineering__cluster__n_clusters': Integer(2, 20),
         'engineering__bin__n_bins': Integer(5, 10),
+        'selection__threshold': Real(.004, .006),
         'classification__C': Real(1e-3, 1e-1, prior='log-uniform'),
     }
 
@@ -67,12 +72,12 @@ def linear_model(X, y, cv=10, rs=42, tune=True, fit=True):
                                                           ('cluster', FeatureAgglomeration(n_clusters=10)),
                                                           ('bin', KBinsDiscretizer(n_bins=10, encode='ordinal', strategy='uniform')),
                                                          ])),
-                            ('selection', SelectKBest(k=75)),
-                            ('classification', LogisticRegression(C=.1, random_state=rs, solver='saga', penalty='l2', max_iter=10000))
+                            ('selection', SelectFromModel(RandomForestClassifier(random_state=rs, n_jobs=n_jobs), threshold=.005)),
+                            ('classification', LogisticRegression(C=.1, random_state=rs, solver='saga', penalty='l2', max_iter=10000, n_jobs=n_jobs))
                            ])
 
     if tune:
-        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=64)
+        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=16)
     if fit:
         model.fit(X, y)
     return model
@@ -95,7 +100,7 @@ def boosting_model(X, y, cv=10, rs=42, tune=True, fit=True):
     model = Pipeline(steps=[('selection', SelectKBest(k=100)),
                             ('classification', XGBClassifier(objective='binary:logistic', random_state=rs, max_depth=5, learning_rate=.05,
                                                              min_child_weight=1, n_estimators=500, gamma=0, subsample=1, colsample_bytree=.6,
-                                                             reg_alpha=1, reg_lambda=1))
+                                                             reg_alpha=1, reg_lambda=1, n_jobs=n_jobs))
                            ])
 
     if tune:
@@ -108,54 +113,47 @@ def boosting_model(X, y, cv=10, rs=42, tune=True, fit=True):
 @print_models
 def neural_network_model(X, y, cv=5, rs=42, tune=True, fit=True):
     grid = {
-        'selection__threshold': Categorical(['mean', 'median']),
-        'classification__batch_size': Integer(64, 256, prior='log-uniform', base=2),
+        'classification__batch_size': Integer(4, 64, prior='log-uniform', base=2),
         'classification__drop': Real(.1, .5),
         'classification__opt': Categorical(['adam', 'adagrad']),
         'classification__act': Categorical(['tanh', 'relu']),
-        'classification__reg': Real(1e-5, 1e-4, prior='log-uniform'),
+        'classification__reg': Real(1e-5, 1e-2, prior='log-uniform'),
         'classification__hls': Integer(int(X.shape[1]/4), X.shape[1]*2)
     }
 
-    def create_mlp(init='normal', drop=.1, opt='adam', act='relu', reg=1e-4, hls=64):
+    def create_mlp(init='normal', drop=.1, opt='adam', act='relu', reg=1e-3, hls=64):
         mlp = Sequential()
-        mlp.add(Dense(hls, activation=act, kernel_initializer=init, activity_regularizer=l2(reg)))
+        mlp.add(Dense(hls, activation=act, kernel_initializer=init, kernel_regularizer=l1_l2(reg), input_shape=(X.shape[1],)))
         mlp.add(Dropout(drop, seed=rs))
         mlp.add(Dense(1, activation='sigmoid'))
-        mlp.compile(loss='binary_crossentropy', optimizer=opt, metrics=[])
+        mlp.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
         return mlp
 
     callback = EarlyStopping(monitor='loss', patience=10)
+    class_weights = compute_class_weight('balanced', np.unique(y), y)
 
-    model = Pipeline(steps=[('preprocessing', MinMaxScaler()),
-                            ('classification', KerasClassifier(build_fn=create_mlp, epochs=500, batch_size=256, verbose=0))
+    model = Pipeline(steps=[('preprocessing', MinMaxScaler(feature_range=(-1, 1))),
+                            ('classification', KerasClassifier(build_fn=create_mlp, epochs=200, batch_size=32, verbose=0))
                            ])
 
     if tune:
         model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=1, random_state=rs, n_iter=32,
-                              fit_params=dict(classification__callbacks=[callback]))
+                              fit_params=dict(classification__class_weight={0: class_weights[0], 1: class_weights[1]},
+                                              classification__callbacks=[callback]))
         if fit:
             model.fit(X, y)
     else:
         if fit:
-            model.fit(X, y, classification__callbacks=[callback])
+            model.fit(X, y, classification__class_weight={0: class_weights[0], 1: class_weights[1]}, classification__callbacks=[callback])
+
     return model
 
 
 @print_models
-def bayesian_model(X, y, cv=5, rs=42, tune=True, fit=True):
-    grid = {
-        'selection__k': Integer(25, X.shape[1]),
-        'classification__solver': Categorical(['lsqr', 'eigen']),
-        'classification__shrinkage': Categorical([None, 'auto'])
-    }
-
-    model = Pipeline(steps=[('selection', SelectKBest(k=50)),
-                            ('classification', LinearDiscriminantAnalysis(solver='svd'))
+def bayesian_model(X, y, cv=5, fit=True):
+    model = Pipeline(steps=[('preprocessing', PowerTransformer()),
+                            ('classification', RFECV(LinearDiscriminantAnalysis(), step=5, scoring=scoring, cv=cv, n_jobs=n_jobs))
                            ])
-
-    if tune:
-        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=32)
     if fit:
         model.fit(X, y)
     return model
@@ -166,9 +164,9 @@ def stacked_model(X, y, cv=2, rs=42):
     clfs = [linear_model(X, y, rs=rs, tune=False, fit=False),
             neural_network_model(X, y, rs=rs, tune=False, fit=False),
             boosting_model(X, y, rs=rs, tune=False, fit=False),
-            bayesian_model(X, y, rs=rs, tune=False, fit=False)
+            bayesian_model(X, y, fit=False)
            ]
-    mclf = LogisticRegression(penalty='l2', random_state=rs, C=.01, solver='saga')
+    mclf = LogisticRegression(penalty='l2', random_state=rs, C=.1, solver='saga')
     model = StackingCVClassifier(classifiers=clfs, use_probas=True, use_features_in_secondary=False, meta_classifier=mclf,
                                  random_state=rs, cv=cv, n_jobs=1)
     model.fit(X, y)
