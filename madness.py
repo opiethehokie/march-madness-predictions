@@ -41,10 +41,10 @@ if __name__ == '__main__':
 
     start_year = 2009
     start_day = 60
-    check_confidence = True
-    save_predictions = True
-    run_simulations = True
-    explain_features = True
+    check_confidence = False
+    save_predictions = False
+    run_simulations = False
+    explain_features = False
 
     games = game_data()
     predict_matchups, future_games = possible_tourney_matchups(predict_year)

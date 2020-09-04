@@ -15,7 +15,7 @@
 
 import numpy as np
 
-from mlxtend.classifier import StackingCVClassifier
+from mlxtend.classifier import EnsembleVoteClassifier
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -31,7 +31,8 @@ from skopt.space import Real, Integer, Categorical
 from keras.callbacks import EarlyStopping
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
-from keras.regularizers import l1_l2
+from keras.optimizers import Adam
+from keras.regularizers import l2
 from keras.wrappers.scikit_learn import KerasClassifier
 from xgboost import XGBClassifier
 
@@ -114,19 +115,18 @@ def boosting_model(X, y, cv=10, rs=42, tune=True, fit=True):
 def neural_network_model(X, y, cv=5, rs=42, tune=True, fit=True):
     grid = {
         'classification__batch_size': Integer(4, 64, prior='log-uniform', base=2),
-        'classification__drop': Real(.1, .5),
-        'classification__opt': Categorical(['adam', 'adagrad']),
-        'classification__act': Categorical(['tanh', 'relu']),
+        'classification__drop': Real(.2, .5),
         'classification__reg': Real(1e-5, 1e-2, prior='log-uniform'),
-        'classification__hls': Integer(int(X.shape[1]/4), X.shape[1]*2)
+        'classification__hls': Integer(int(X.shape[1]/8), X.shape[1])
     }
 
-    def create_mlp(init='normal', drop=.1, opt='adam', act='relu', reg=1e-3, hls=64):
+    def create_mlp(init='normal', drop=.4, act='relu', reg=1e-6, hls=64):
         mlp = Sequential()
-        mlp.add(Dense(hls, activation=act, kernel_initializer=init, kernel_regularizer=l1_l2(reg), input_shape=(X.shape[1],)))
+        mlp.add(Dropout(.2, seed=rs, input_shape=(X.shape[1],)))
+        mlp.add(Dense(hls, activation=act, kernel_initializer=init, kernel_regularizer=l2(reg)))
         mlp.add(Dropout(drop, seed=rs))
         mlp.add(Dense(1, activation='sigmoid'))
-        mlp.compile(loss='binary_crossentropy', optimizer=opt, metrics=['accuracy'])
+        mlp.compile(loss='binary_crossentropy', optimizer=Adam(amsgrad=True), metrics=['accuracy'])
         return mlp
 
     callback = EarlyStopping(monitor='loss', patience=10)
@@ -160,14 +160,12 @@ def bayesian_model(X, y, cv=5, fit=True):
 
 
 @print_models
-def stacked_model(X, y, cv=2, rs=42):
-    clfs = [linear_model(X, y, rs=rs, tune=False, fit=False),
-            neural_network_model(X, y, rs=rs, tune=False, fit=False),
-            boosting_model(X, y, rs=rs, tune=False, fit=False),
-            bayesian_model(X, y, fit=False)
+def stacked_model(X, y, rs=42):
+    clfs = [linear_model(X, y, rs=rs, tune=False, fit=True),
+            #neural_network_model(X, y, rs=rs, tune=False, fit=True),
+            boosting_model(X, y, rs=rs, tune=False, fit=True),
+            bayesian_model(X, y, fit=True)
            ]
-    mclf = LogisticRegression(penalty='l2', random_state=rs, C=.1, solver='saga')
-    model = StackingCVClassifier(classifiers=clfs, use_probas=True, use_features_in_secondary=False, meta_classifier=mclf,
-                                 random_state=rs, cv=cv, n_jobs=1)
+    model = EnsembleVoteClassifier(clfs=clfs, fit_base_estimators=False, voting='soft', weights=[10, 3, 2], verbose=1)
     model.fit(X, y)
     return model
