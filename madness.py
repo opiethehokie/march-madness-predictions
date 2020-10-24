@@ -41,7 +41,7 @@ if __name__ == '__main__':
 
     start_year = 2009
     start_day = 60
-    check_confidence = True
+    check_confidence = False
     save_predictions = False
     run_simulations = False
     explain_features = False
@@ -63,9 +63,9 @@ if __name__ == '__main__':
     regression_models = [neural_network_model(X_train, regression_y_train, cv, random_state, tune=False)
                         ]
 
-    classification_models = [linear_model(X_train, classification_y_train, cv, random_state, tune=False),
-                             boosting_model(X_train, classification_y_train, cv, random_state, tune=False),
-                             bayesian_model(X_train, classification_y_train, cv)
+    classification_models = [#linear_model(X_train, classification_y_train, cv, random_state, tune=False),
+                             #boosting_model(X_train, classification_y_train, cv, random_state, tune=False),
+                             #bayesian_model(X_train, classification_y_train, cv)
                             ]
 
     if X_test.size > 0:
