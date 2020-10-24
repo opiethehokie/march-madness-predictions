@@ -60,8 +60,8 @@ def custom_train_test_split(data, features, predict_year):
     test_games = data[(data.Season == predict_year) & (data.Daynum >= TOURNEY_START_DAY) & (data.Daynum != 999)]
     test_features = features.query('Season == @predict_year and Daynum >= @TOURNEY_START_DAY and Daynum != 999')
     predict_features = features.query('Season == @predict_year and Daynum == 999')
-    train_results = train_games[['Wteam', 'Lteam']].apply(_win, axis=1)
-    test_results = test_games[['Wteam', 'Lteam']].apply(_win, axis=1)
+    train_results = train_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(_mov, axis=1)
+    test_results = test_games[['Wteam', 'Lteam', 'Wscore', 'Lscore']].apply(_mov, axis=1)
     cv = _custom_cv(train_features)
     return (train_features.values.astype('float64'), test_features.values.astype('float64'), predict_features.values.astype('float64'),
             train_results.values, test_results.values, cv)

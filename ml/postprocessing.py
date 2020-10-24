@@ -42,16 +42,13 @@ def mov_to_win_percent(u, m=11, offset=0):
     u = u + offset
     return 1 - norm.cdf(0.5, loc=u, scale=m) + .5 * (norm.cdf(0.5, loc=u, scale=m) - norm.cdf(-0.5, loc=u, scale=m))
 
-def average_prediction_probas(models, X, low_clip=.025, high_clip=.975):
-    predictions = []
-    for model in models:
-        predictions.append(model.predict_proba(X)[:, 1])
+def average_prediction_probas(regression_models, classification_models, X, low_clip=.025, high_clip=.975):
+    predictions = [model.predict(X) for model in regression_models] + [model.predict_proba(X)[:, 1] for model in classification_models]
     return np.clip(np.mean(np.array(predictions), axis=0), low_clip, high_clip)
 
-def average_predictions(models, X):
-    predictions = []
-    for model in models:
-        predictions.append(np.reshape(model.predict(X), (X.shape[0])))
+def average_predictions(regression_models, classification_models, X):
+    predictions = [np.reshape([1 if yi >= .5 else 0 for yi in model.predict(X)], (X.shape[0])) for model in regression_models] + \
+                  [np.reshape(model.predict(X), (X.shape[0])) for model in classification_models]
     return np.rint(np.mean(np.array(predictions), axis=0))
 
 # https://machinelearningmastery.com/use-statistical-significance-tests-interpret-machine-learning-results/

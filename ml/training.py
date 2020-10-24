@@ -13,9 +13,6 @@
 #   limitations under the License.
 
 
-import numpy as np
-
-from mlxtend.classifier import EnsembleVoteClassifier
 from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -25,15 +22,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import make_scorer, log_loss
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import MinMaxScaler, PowerTransformer, KBinsDiscretizer
-from sklearn.utils.class_weight import compute_class_weight
 from skopt.searchcv import BayesSearchCV
 from skopt.space import Real, Integer, Categorical
-from keras.callbacks import EarlyStopping
 from keras.models import Sequential
 from keras.layers import Dense, Dropout
 from keras.optimizers import Adam
-from keras.regularizers import l2
-from keras.wrappers.scikit_learn import KerasClassifier
+from keras.wrappers.scikit_learn import KerasRegressor
 from xgboost import XGBClassifier
 
 
@@ -101,7 +95,7 @@ def boosting_model(X, y, cv=10, rs=42, tune=True, fit=True):
     model = Pipeline(steps=[('selection', SelectKBest(k=100)),
                             ('classification', XGBClassifier(objective='binary:logistic', random_state=rs, max_depth=5, learning_rate=.05,
                                                              min_child_weight=1, n_estimators=500, gamma=0, subsample=1, colsample_bytree=.6,
-                                                             reg_alpha=1, reg_lambda=1, n_jobs=n_jobs))
+                                                             reg_alpha=.1, reg_lambda=1, n_jobs=n_jobs))
                            ])
 
     if tune:
@@ -114,37 +108,30 @@ def boosting_model(X, y, cv=10, rs=42, tune=True, fit=True):
 @print_models
 def neural_network_model(X, y, cv=5, rs=42, tune=True, fit=True):
     grid = {
-        'classification__batch_size': Integer(4, 64, prior='log-uniform', base=2),
-        'classification__drop': Real(.2, .5),
-        'classification__reg': Real(1e-5, 1e-2, prior='log-uniform'),
-        'classification__hls': Integer(int(X.shape[1]/8), X.shape[1])
+        'regression__batch_size': Integer(8, 64, prior='log-uniform', base=2),
+        'regression__drop': Categorical([0.0, 0.1, 0.2]),
+        'regression__hls': Integer(16, 256, prior='log-uniform', base=2),
+        'regression__lr': Real(1e-4, 1e-2, prior='log-uniform'),
+        'regression__ki': Categorical(['random_normal', 'random_uniform', 'glorot_uniform', 'glorot_normal'])
     }
 
-    def create_mlp(init='normal', drop=.4, act='relu', reg=1e-6, hls=64):
+    def create_mlp(drop=.1, hls=32, lr=1e-3, ki='random_normal'):
         mlp = Sequential()
-        mlp.add(Dropout(.2, seed=rs, input_shape=(X.shape[1],)))
-        mlp.add(Dense(hls, activation=act, kernel_initializer=init, kernel_regularizer=l2(reg)))
-        mlp.add(Dropout(drop, seed=rs))
-        mlp.add(Dense(1, activation='sigmoid'))
-        mlp.compile(loss='binary_crossentropy', optimizer=Adam(amsgrad=True), metrics=['accuracy'])
+        mlp.add(Dense(hls, kernel_initializer=ki, activation='relu', input_shape=(X.shape[1],)))
+        mlp.add(Dropout(drop))
+        mlp.add(Dense(1, kernel_initializer=ki))
+        mlp.compile(loss='mean_squared_logarithmic_error', optimizer=Adam(learning_rate=lr))
         return mlp
 
-    callback = EarlyStopping(monitor='loss', patience=10)
-    class_weights = compute_class_weight('balanced', np.unique(y), y)
-
     model = Pipeline(steps=[('preprocessing', MinMaxScaler(feature_range=(-1, 1))),
-                            ('classification', KerasClassifier(build_fn=create_mlp, epochs=200, batch_size=32, verbose=0))
+                            ('pca', PCA(random_state=rs)),
+                            ('regression', KerasRegressor(build_fn=create_mlp, epochs=10, batch_size=8, verbose=0))
                            ])
 
     if tune:
-        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=1, random_state=rs, n_iter=32,
-                              fit_params=dict(classification__class_weight={0: class_weights[0], 1: class_weights[1]},
-                                              classification__callbacks=[callback]))
-        if fit:
-            model.fit(X, y)
-    else:
-        if fit:
-            model.fit(X, y, classification__class_weight={0: class_weights[0], 1: class_weights[1]}, classification__callbacks=[callback])
+        model = BayesSearchCV(model, grid, cv=cv, n_jobs=1, random_state=rs, n_iter=32)
+    if fit:
+        model.fit(X, y)
 
     return model
 
@@ -156,16 +143,4 @@ def bayesian_model(X, y, cv=5, fit=True):
                            ])
     if fit:
         model.fit(X, y)
-    return model
-
-
-@print_models
-def stacked_model(X, y, rs=42):
-    clfs = [linear_model(X, y, rs=rs, tune=False, fit=True),
-            #neural_network_model(X, y, rs=rs, tune=False, fit=True),
-            boosting_model(X, y, rs=rs, tune=False, fit=True),
-            bayesian_model(X, y, fit=True)
-           ]
-    model = EnsembleVoteClassifier(clfs=clfs, fit_base_estimators=False, voting='soft', weights=[10, 3, 2], verbose=1)
-    model.fit(X, y)
     return model
