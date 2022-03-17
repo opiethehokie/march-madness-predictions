@@ -1,0 +1,69 @@
+---
+# team names should match teams.csv file
+# winner of first two regions will play in final four, winner of second two regions will play in final four
+# order of "seed: team" in each region should match actual brackets
+# play-in teams represented like: teama | teamb
+W1: Gonzaga
+W16: Georgia St
+W8: Boise St
+W9: Memphis
+W5: Connecticut
+W12: New Mexico St
+W4: Arkansas
+W13: Vermont
+W6: Alabama
+W11: Notre Dame | Rutgers
+W3: Texas Tech
+W14: Montana St
+W7: Michigan St
+W10: Davidson
+W2: Duke
+W15: CS Fullerton
+S1: Arizona
+S16: Bryant | Wright St
+S8: Seton Hall
+S9: TCU
+S5: Houston
+S12: UAB
+S4: Illinois
+S13: Chattanooga
+S6: Colorado St
+S11: Michigan
+S3: Tennessee
+S14: Longwood
+S7: Ohio St
+S10: Loyola-Chicago
+S2: Villanova
+S15: Delaware
+E1: Baylor
+E16: Norfolk St
+E8: North Carolina
+E9: Marquette
+E5: St Mary's CA
+E12: Indiana | Wyoming
+E4: UCLA
+E13: Akron
+E6: Texas
+E11: Virginia Tech
+E3: Purdue
+E14: Yale
+E7: Murray St
+E10: San Francisco
+E2: Kentucky
+E15: St Peter's
+M1: Kansas
+M16: TAM C. Christi | TX Southern
+M8: San Diego St
+M9: Creighton
+M5: Iowa
+M12: Richmond
+M4: Providence
+M13: S Dakota St
+M6: LSU
+M11: Iowa St
+M3: Wisconsin
+M14: Colgate
+M7: USC
+M10: Miami FL
+M2: Auburn
+M15: Jacksonville St

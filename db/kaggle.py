@@ -5,13 +5,14 @@ import numpy as np
 import pandas as pd
 
 
-TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2018.csv'
-SEASON_DATA_FILE = 'data/regular_season_detailed_results_2019.csv'
+TOURNEY_DATA_FILE = 'data/tourney_detailed_results_2019.csv'
+SEASON_DATA_FILE = 'data/regular_season_detailed_results_2022.csv'
 SUBMISSION_FILE = 'results/submission%s.csv'
 SAMPLE_SUBMISSION_FILE = 'results/sample_submission_%s.csv'
-TEAMS_FILE = 'data/teams.csv'
-SEEDS_FILE = 'data/seeds_2019.csv'
-SLOTS_FILE = 'data/slots_2019.csv'
+TEAMS_FILE = 'data/teams_2022.csv'
+SEEDS_FILE = 'data/seeds_2022.csv'
+SLOTS_FILE = 'data/slots_2022.csv'
+CONFS_FILE = 'data/conferences_2022.csv'
 
 
 def game_data():
@@ -50,6 +51,14 @@ def team_seed_mapping():
         for row in reader:
             seeds[row['Season']][row['Team']] = row['Seed']
     return seeds
+
+def team_conference_mapping():
+    confs = defaultdict(lambda: defaultdict(str))
+    with open(CONFS_FILE, newline='') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            confs[row['Season']][row['Team']] = row['ConfAbbrev']
+    return confs
 
 def championship_pairings():
     slots = defaultdict()
