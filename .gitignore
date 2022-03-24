@@ -9,6 +9,7 @@ results/out.txt
 results/submission*.csv
 results/*.png
 data/*.db
-data/*.joblib
+data/*.h5
+data/metadata.csv
 .vscode
 htmlcov

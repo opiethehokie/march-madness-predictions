@@ -1,18 +1,12 @@
+import itertools
 from collections import defaultdict
 from functools import partial
 
-import itertools
 import numpy as np
 import scipy
-
-from statsmodels.tsa.api import SimpleExpSmoothing, Holt
-
+from statsmodels.tsa.api import Holt, SimpleExpSmoothing
 
 TOURNEY_START_DAY = 134
-
-
-# these are calculated using stats from the game to be predicted which seems wrong, but it handles the first
-# game problem and we don't use any tourney stats, so I think it's ok
 
 def _rpi(season_results, team, weights):
     results = season_results[team]['results']
@@ -55,41 +49,45 @@ def modified_rpi(X, start_day, weights=(.15, .15, .7)):
             stats[row.Season][row.Lteam]['results'].append(0)
     return np.array(rpis)
 
-def descriptive_stats(results):
+def descriptive_stats(results, frequency_domain=False):
     described = []
     for stat in results.keys():
-        described.append(min(results[stat]))
-        described.append(max(results[stat]))
-        described.append(np.median(results[stat]))
-        described.append(np.mean(results[stat]))
-        described.append(np.var(results[stat])) # second moment
-        described.append(scipy.stats.skew(results[stat])) #third moment
-        described.append(scipy.stats.kurtosis(results[stat])) # fourth moment
+        x = np.abs(np.fft.fft(results[stat])) if frequency_domain else results[stat]
+        described.append(min(x))
+        described.append(max(x))
+        described.append(np.percentile(x, 75) - np.percentile(x, 25)) # IQR
+        described.append(np.median(x))
+        described.append(np.mean(x))
+        described.append(np.var(x)) # second moment
+        described.append(scipy.stats.skew(x)) #third moment
+        described.append(scipy.stats.kurtosis(x)) # fourth moment
     return described
 
-def time_series_stats(results):
+def time_series_stats(results, frequency_domain=False):
     timed = []
     for stat in results.keys():
-        timed.append(results[stat][-1])
-        timed.append(np.mean(results[stat][-5:])) # simple 5 game moving average
-        m = np.mean(results[stat])
-        timed.append(len(list(itertools.takewhile(lambda x, mean=m: x > mean, reversed(results[stat]))))) # monotonicity
-        timed.append(len(list(itertools.takewhile(lambda x, mean=m: x < mean, reversed(results[stat])))))
-        if len(results[stat]) > 1:
-            timed.append(SimpleExpSmoothing(results[stat]).fit(smoothing_level=.3, optimized=False).fittedvalues[-1]) # exponential smoothing
-            timed.append(Holt(results[stat]).fit(smoothing_level=.5, smoothing_slope=.5, optimized=False).fittedvalues[-1]) # Holt's linear trend
+        x = np.abs(np.fft.fft(results[stat])) if frequency_domain else results[stat]
+        timed.append(x[-1])
+        timed.append(np.mean(x[-3:])) # simple 3 game moving average
+        timed.append(np.mean(x[-5:])) # simple 5 game moving average
+        m = np.mean(x)
+        timed.append(len(list(itertools.takewhile(lambda xi, mean=m: xi > mean, reversed(x))))) # monotonicity
+        timed.append(len(list(itertools.takewhile(lambda xi, mean=m: xi < mean, reversed(x)))))
+        if len(x) > 1:
+            timed.append(SimpleExpSmoothing(x).fit(smoothing_level=.3, optimized=False).fittedvalues[-1]) # exponential smoothing
+            timed.append(Holt(x).fit(smoothing_level=.5, smoothing_slope=.5, optimized=False).fittedvalues[-1]) # Holt's linear trend
         else:
-            timed.append(results[stat][0])
-            timed.append(results[stat][0])
+            timed.append(x[0])
+            timed.append(x[0])
     return timed
 
-def statistics(X, start_day, stat_F):
+def statistics(X, start_day, stat_F, frequency_domain=False):
     stats = defaultdict(partial(defaultdict, partial(defaultdict, list)))
     compiled_stats = []
     for row in X.itertuples(index=False):
         if row.Daynum >= start_day:
-            wstats = stat_F(stats[row.Season][row.Wteam])
-            lstats = stat_F(stats[row.Season][row.Lteam])
+            wstats = stat_F(stats[row.Season][row.Wteam], frequency_domain=frequency_domain)
+            lstats = stat_F(stats[row.Season][row.Lteam], frequency_domain=frequency_domain)
             if row.Wteam < row.Lteam:
                 compiled_stats.append(np.subtract(wstats, lstats))
             else:

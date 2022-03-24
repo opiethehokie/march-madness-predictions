@@ -27,8 +27,9 @@ def mov_to_win_percent(u, m=11, offset=0):
     u = u + offset
     return 1 - norm.cdf(0.5, loc=u, scale=m) + .5 * (norm.cdf(0.5, loc=u, scale=m) - norm.cdf(-0.5, loc=u, scale=m))
 
+#TODO could clip less for R1 (.99) and more for R2 (.93) based on historical upset probabilities
 def average_prediction_probas(regression_models, classification_models, X, low_clip=.025, high_clip=.975):
-    predictions = [model.predict(X) for model in regression_models] + [model.predict_proba(X)[:, 1] for model in classification_models]
+    predictions = [model.predict(X) for model in regression_models] + [model.predict_proba(X)[:, -1] for model in classification_models]
     return np.clip(np.mean(np.array(predictions), axis=0), low_clip, high_clip)
 
 def average_predictions(regression_models, classification_models, X):

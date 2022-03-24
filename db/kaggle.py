@@ -16,6 +16,7 @@ CONFS_FILE = 'data/conferences_2022.csv'
 
 
 def game_data():
+    #TODO add seed and round for tourney games to enable slicing predictions on that data
     return pd.concat([pd.read_csv(SEASON_DATA_FILE), pd.read_csv(TOURNEY_DATA_FILE)]).sort_values(by=['Daynum', 'Wteam', 'Lteam'])
 
 def read_predictions(file_adjustment=''):
