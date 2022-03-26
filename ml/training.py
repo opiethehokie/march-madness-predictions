@@ -1,12 +1,16 @@
+import keras.backend as K
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.layers import Dense, Dropout
 from keras.models import Sequential, load_model
 from keras.optimizers import Adagrad
 from keras.wrappers.scikit_learn import KerasClassifier
+from sklearn.cluster import AgglomerativeClustering, FeatureAgglomeration
 from sklearn.decomposition import PCA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
 from sklearn.ensemble import RandomTreesEmbedding
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, make_scorer
+from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from skopt.searchcv import BayesSearchCV
 from skopt.space import Categorical, Integer, Real
@@ -37,26 +41,26 @@ def print_models(func):
 
 
 @print_models
-def linear_model(X, y, cv=12, rs=None, tune=False):
+def linear_model(X, y, cv=11, rs=None, tune=False):
     grid = {
-        'engineering__n_components': Real(.7, .95),
-        'classification__C': Real(1e-3, 1e-1, prior='log-uniform'),
-        'classification__penalty': Categorical(['l1', 'l2'])
+        'engineering__n_components': [.8, .9, .95],
+        'classification__C': [5e-3, 1e-2, 5e-2],
+        'classification__penalty': ['l1', 'l2']
     }
 
-    model = Pipeline(steps=[('engineering', PCA(random_state=rs, n_components=.95)),
-                            ('classification', LogisticRegression(C=.025, solver='saga', penalty='l2', random_state=rs, n_jobs=n_jobs, max_iter=10000))
+    model = Pipeline(steps=[('engineering', PCA(random_state=rs, n_components=.8)),
+                            ('classification', LogisticRegression(C=.05, solver='saga', penalty='l2', random_state=rs, n_jobs=n_jobs, max_iter=10000))
                            ])
 
     if tune:
-        model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=16)
+        model = GridSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs)
 
     model.fit(X, y)
     return model
 
 
 @print_models
-def embedding_model(X, y, cv=12, rs=None, tune=False):
+def embedding_model(X, y, cv=11, rs=None, tune=False):
     grid = {
         'engineering__n_estimators': Integer(50, 250),
         'engineering__max_depth': Integer(3, 6),
@@ -64,8 +68,8 @@ def embedding_model(X, y, cv=12, rs=None, tune=False):
         'classification__penalty': Categorical(['l1', 'l2'])
     }
 
-    model = Pipeline(steps=[('engineering', RandomTreesEmbedding(n_estimators=200, max_depth=5, random_state=rs, n_jobs=n_jobs)),
-                            ('classification', LogisticRegression(C=.005, solver='saga', penalty='l2', random_state=rs, n_jobs=n_jobs, max_iter=10000))])
+    model = Pipeline(steps=[('engineering', RandomTreesEmbedding(n_estimators=250, max_depth=3, random_state=rs, n_jobs=n_jobs)),
+                            ('classification', LogisticRegression(C=.002, solver='saga', penalty='l2', random_state=rs, n_jobs=n_jobs, max_iter=10000))])
 
     if tune:
         model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=32)
@@ -80,18 +84,18 @@ def neural_network_model(X, y, cv=2, rs=None, tune=False, fit=True, X_test=None,
     model_file_path = 'data/mlp.h5'
 
     grid = {
-        'batch_size': Integer(8, 16, prior='uniform', base=2),
+        'batch_size': Categorical([8, 16]),
         'hls': Integer(int(X.shape[1]/2), int(X.shape[1])),
         'lr': Real(1e-3, 1e-1, prior='log-uniform'),
         'drop': Real(0.1, 0.5, prior='uniform')
     }
 
-    def create_mlp(hls=28, lr=5e-3, drop=.15):
+    def create_mlp(hls=30, lr=1e-2, drop=.5):
         if not fit:
             #mlp: Sequential = load_model(checkpoint_file_path)
-            mlp = load_model(model_file_path)
             #print(mlp.get_config())
             #print('lr', K.eval(mlp.optimizer.lr))
+            mlp = load_model(model_file_path)
         else:
             mlp = Sequential()
             mlp.add(Dense(hls, activation='relu', input_shape=(X.shape[1],)))
@@ -102,7 +106,7 @@ def neural_network_model(X, y, cv=2, rs=None, tune=False, fit=True, X_test=None,
 
     if tune:
         classifier = KerasClassifier(build_fn=create_mlp)
-        model = BayesSearchCV(classifier, grid, cv=cv, scoring=scoring, n_jobs=1, random_state=rs, n_iter=16)
+        model = BayesSearchCV(classifier, grid, cv=cv, scoring=scoring, n_jobs=1, random_state=rs, n_iter=32)
     else:
         model = create_mlp()
 
@@ -116,4 +120,30 @@ def neural_network_model(X, y, cv=2, rs=None, tune=False, fit=True, X_test=None,
         model.fit(X, y, validation_data=validation_data, callbacks=callbacks, epochs=32, batch_size=8, verbose=1)
         model.best_estimator_.model.save(model_file_path) if hasattr(model, 'best_estimator_') else model.save(model_file_path)
 
+    return model
+
+
+@print_models
+def bayesian_model(X, y, cv=11, rs=None, tune=False):
+    grid = [{
+        'engineering__n_clusters': range(2, 20, 1),
+        'engineering__affinity': ['euclidean', 'l1', 'l2', 'manhattan', 'cosine'],
+        'engineering__linkage': ['complete', 'average', 'single'],
+        'classification__solver': ['svd', 'lsqr', 'eigen']
+    },
+    {
+        'engineering__n_clusters': range(2, 20, 1),
+        'engineering__affinity': ['euclidean'],
+        'engineering__linkage': ['ward'],
+        'classification__solver': ['svd', 'lsqr', 'eigen'],
+    }]
+
+    model = Pipeline(steps=[('engineering', FeatureAgglomeration(affinity='euclidean', linkage='ward', n_clusters=10)),
+                            ('classification', LinearDiscriminantAnalysis(solver='lsqr'))
+                           ])
+
+    if tune:
+        model = GridSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs)
+
+    model.fit(X, y)
     return model

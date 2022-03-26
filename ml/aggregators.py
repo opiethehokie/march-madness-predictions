@@ -49,6 +49,7 @@ def modified_rpi(X, start_day, weights=(.15, .15, .7)):
             stats[row.Season][row.Lteam]['results'].append(0)
     return np.array(rpis)
 
+#TODO remove unimportant
 def descriptive_stats(results, frequency_domain=False):
     described = []
     for stat in results.keys():
@@ -63,6 +64,7 @@ def descriptive_stats(results, frequency_domain=False):
         described.append(scipy.stats.kurtosis(x)) # fourth moment
     return described
 
+#TODO remove unimportant
 def time_series_stats(results, frequency_domain=False):
     timed = []
     for stat in results.keys():
@@ -93,7 +95,7 @@ def statistics(X, start_day, stat_F, frequency_domain=False):
             else:
                 compiled_stats.append(np.subtract(lstats, wstats))
         if row.Daynum < TOURNEY_START_DAY:
-            wposs = row.Wfga - row.Wor + row.Wto + .475 * row.Wfta
+            wposs = row.Wfga - row.Wor + row.Wto + .475 * row.Wfta #TODO try multiple poss proxies like rpi weights
             lposs = row.Lfga - row.Lor + row.Lto + .475 * row.Lfta
             # interaction features based on commonly used metrics
             stats[row.Season][row.Wteam]['eff_field_goal_percent'].append((row.Wfgm + .5 * row.Wfgm3) / row.Wfga)

@@ -1,20 +1,25 @@
 import random
 import sys
 
-import shap
+import matplotlib
 import numpy as np
+import shap
 from deepchecks import Dataset
 from deepchecks.suites import full_suite
-from sklearn.metrics import log_loss, roc_curve, confusion_matrix, auc, accuracy_score, classification_report
+from sklearn.metrics import (accuracy_score, auc, brier_score_loss,
+                             classification_report, confusion_matrix, log_loss,
+                             roc_curve)
 
-from db.kaggle import (game_data, read_predictions, write_predictions, team_id_mapping, team_seed_mapping,
-                       championship_pairings, possible_tourney_matchups)
-from ml.training import linear_model, embedding_model, neural_network_model
+from db.kaggle import (championship_pairings, game_data,
+                       possible_tourney_matchups, read_predictions,
+                       team_id_mapping, team_seed_mapping, write_predictions)
+from ml.postprocessing import (average_prediction_probas, average_predictions,
+                               confidence_intervals, effect_size,
+                               override_final_predictions, significance_test,
+                               statistical_power)
+from ml.training import bayesian_model, embedding_model, linear_model, neural_network_model
 from ml.wrangling import prepare_data
-from ml.postprocessing import (override_final_predictions, average_predictions, average_prediction_probas, significance_test,
-                               confidence_intervals, effect_size, statistical_power)
 from simulations.bracket import simulate_tourney
-
 
 random_state = 4298
 random.seed(random_state)
@@ -28,8 +33,8 @@ if __name__ == '__main__':
     start_year = 2009
     start_day = 45
     check_confidence = False
-    save_predictions = False
-    run_simulations = False
+    save_predictions = True
+    run_simulations = True
     explain_features = False
     deepcheck = False
 
@@ -43,8 +48,9 @@ if __name__ == '__main__':
     # ML
 
     classification_models = [linear_model(X_train, y_train, cv=cv, rs=random_state, tune=False),
-                             embedding_model(X_train, y_train, cv=cv, rs=random_state, tune=False),
-                             neural_network_model(X_train, y_train, rs=random_state, tune=False, fit=False)
+                             embedding_model(X_train, y_train, rs=random_state, tune=False),
+                             neural_network_model(X_train, y_train, rs=random_state, tune=False, fit=False),
+                             bayesian_model(X_train, y_train, cv=cv, rs=random_state, tune=False)
                             ]
 
     if X_test.size > 0:
@@ -55,6 +61,7 @@ if __name__ == '__main__':
         print('Test classification report:\n', classification_report(y_test, results))
         fp_rates, tp_rates, _ = roc_curve(y_test, results)
         print('Test AUC: %f' % auc(fp_rates, tp_rates))
+        print('Test Brier score loss: %f' % brier_score_loss(y_test, result_probas))
         print('Test log loss: %f' % log_loss(y_test, result_probas))
 
     if save_predictions:
@@ -91,18 +98,25 @@ if __name__ == '__main__':
         print('95 percent confidence intervals for average: %f - %f' % (lower, upper))
 
     if explain_features and X_test.size > 0:
+        matplotlib.use( 'tkagg' )
+        model = linear_model(X_train, y_train, cv=cv, rs=random_state)
         # game theoretic approach to global interpretability
-        for model in classification_models:
-            explainer = shap.KernelExplainer(model.predict_proba, shap.sample(X_train, 10))
-            shap_values = explainer.shap_values(X_test)
-            shap.summary_plot(shap_values) #TODO if high in training but not test then contributing to overfitting, if high in test but not training then contributing to generalization - remove if overfitting
+        explainer = shap.KernelExplainer(model.predict_proba, shap.sample(X_train, nsamples=67))
+        # if high in training but not test then contributing to overfitting (should remove)
+        # if high in test but not training then contributing to generalization
+        shap.summary_plot(explainer.shap_values(shap.sample(X_train, nsamples=67), l1_reg='num_features(10)'), show=False)
+        matplotlib.pyplot.savefig('results/shap-values-linear-train.png')
+        shap.summary_plot(explainer.shap_values(X_test, l1_reg='num_features(10)'), show=False)
+        matplotlib.pyplot.savefig('results/shap-values-linear-test.png')
 
     if deepcheck and X_test.size > 0:
-        train_ds = Dataset.from_numpy(np.concatenate([X_train, y_train], axis=1))
-        test_ds = Dataset.from_numpy(np.concatenate([X_test, y_test], axis=1))
-        model = linear_model(X_train, classification_y_train, cv, random_state)
+        cols = [str(x) for x in range(X_train.shape[1])]
+        train_ds = Dataset.from_numpy(X_train, y_train, columns=cols, cat_features=[])
+        test_ds = Dataset.from_numpy(X_test, y_test, columns=cols, cat_features=[])
+        model = linear_model(X_train, y_train, cv=cv, rs=random_state)
         suite = full_suite()
-        suite.run(train_dataset=train_ds, test_dataset=test_ds, model=model)
+        result = suite.run(train_dataset=train_ds, test_dataset=test_ds, model=model)
+        result.save_as_html('results/deepchecks-linear.html')
 
     if run_simulations:
         simulate_tourney(team_id_mapping(), read_predictions(), predict_year)

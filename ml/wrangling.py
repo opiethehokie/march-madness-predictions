@@ -100,7 +100,7 @@ def _construct_ratings(data, start_day, bust_cache=False):
     write_features(ratings, 'ratings')
     return ratings
 
-#TODO should try some coach features here and save in sqlite
+#TODO try some coach features here and save in sqlite
 def _construct_other(data, start_day):
     data = data[(data.Daynum >= start_day)]
     location = np.where(data.Wloc == 'N', 'N', np.where(((data.Wteam < data.Lteam) & (data.Wloc == 'H')) | ((data.Lteam < data.Wteam) & (data.Wloc == 'A')), 'H', 'A'))
@@ -136,13 +136,15 @@ def prepare_data(games, future_games, start_day, start_year, predict_year, num_f
     rf = RandomForestClassifier(n_estimators=num_features)
     selection = SelectFromModel(rf, threshold=-np.inf, max_features=num_features)
     X_train = selection.fit_transform(X_train, y_train)
-    X_test = selection.transform(X_test)
+    if X_test.size > 0:
+        X_test = selection.transform(X_test)
     X_predict = selection.transform(X_predict)
 
     preprocessor = ColumnTransformer([('categorical', 'passthrough', slice(0, 2)),
                                       ('power', PowerTransformer(standardize=True), slice(2, None))])
     X_train = preprocessor.fit_transform(X_train, y_train)
-    X_test = preprocessor.transform(X_test)
+    if X_test.size > 0:
+        X_test = preprocessor.transform(X_test)
     X_predict = preprocessor.transform(X_predict)
 
     selected_features = features.columns[selection._get_support_mask()]

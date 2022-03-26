@@ -19,22 +19,6 @@ W7: Michigan St
 W10: Davidson
 W2: Duke
 W15: CS Fullerton
-S1: Arizona
-S16: Bryant | Wright St
-S8: Seton Hall
-S9: TCU
-S5: Houston
-S12: UAB
-S4: Illinois
-S13: Chattanooga
-S6: Colorado St
-S11: Michigan
-S3: Tennessee
-S14: Longwood
-S7: Ohio St
-S10: Loyola-Chicago
-S2: Villanova
-S15: Delaware
 E1: Baylor
 E16: Norfolk St
 E8: North Carolina
@@ -51,6 +35,22 @@ E7: Murray St
 E10: San Francisco
 E2: Kentucky
 E15: St Peter's
+S1: Arizona
+S16: Bryant | Wright St
+S8: Seton Hall
+S9: TCU
+S5: Houston
+S12: UAB
+S4: Illinois
+S13: Chattanooga
+S6: Colorado St
+S11: Michigan
+S3: Tennessee
+S14: Longwood
+S7: Ohio St
+S10: Loyola-Chicago
+S2: Villanova
+S15: Delaware
 M1: Kansas
 M16: TAM C. Christi | TX Southern
 M8: San Diego St
