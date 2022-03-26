@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
 
+from sklearn.compose import ColumnTransformer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_selection import SelectFromModel
 from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import PowerTransformer
+from sklearn.preprocessing import OneHotEncoder, PowerTransformer
 
 from db.cache import features_exist, read_features, write_features
 from ratings.markov import markov_stats
@@ -25,11 +26,12 @@ def filter_out_of_window_games(data, features, sday, syear, eyear):
 
 def sample_tourney_like_games(data, features, k=10):
     features = features.copy()
-    tourney_features = features.query('Daynum >= @TOURNEY_START_DAY')
     reg_features = features.query('Daynum < @TOURNEY_START_DAY')
+    tourney_features = features.query('Daynum >= @TOURNEY_START_DAY')
     nn = NearestNeighbors(n_neighbors=k).fit(reg_features)
     _, indices = nn.kneighbors(tourney_features)
     indices = indices.reshape(indices.shape[0]*indices.shape[1])
+    indices = list(set(indices))
     reg_features = features.iloc[indices]
     sample_features = pd.concat([reg_features, tourney_features], axis=0)
     sample_data = pd.concat([data.iloc[indices], data[(data.Daynum >= TOURNEY_START_DAY)]], axis=0)
@@ -98,13 +100,12 @@ def _construct_ratings(data, start_day, bust_cache=False):
     write_features(ratings, 'ratings')
     return ratings
 
+#TODO should try some coach features here and save in sqlite
 def _construct_other(data, start_day):
     data = data[(data.Daynum >= start_day)]
-    alocation = pd.DataFrame(np.where((data.Wteam < data.Lteam) & (data.Wloc == 'H'), 1, 0), columns=['location1'])
-    blocation = pd.DataFrame(np.where((data.Wteam > data.Lteam) & (data.Wloc == 'H'), 1, 0), columns=['location2'])
-    #TODO should try some coach features here and save in sqlite
-    location = pd.concat([alocation, blocation], axis=1)
-    return location
+    location = np.where(data.Wloc == 'N', 'N', np.where(((data.Wteam < data.Lteam) & (data.Wloc == 'H')) | ((data.Lteam < data.Wteam) & (data.Wloc == 'A')), 'H', 'A'))
+    one_hot_location = OneHotEncoder().fit_transform(location.reshape(-1, 1)).toarray()
+    return pd.DataFrame(one_hot_location, columns=['location1', 'location2', 'location3'])
 
 def extract_features(data, start_day):
     other = _construct_other(data, start_day)
@@ -138,7 +139,8 @@ def prepare_data(games, future_games, start_day, start_year, predict_year, num_f
     X_test = selection.transform(X_test)
     X_predict = selection.transform(X_predict)
 
-    preprocessor = PowerTransformer(standardize=True)
+    preprocessor = ColumnTransformer([('categorical', 'passthrough', slice(0, 2)),
+                                      ('power', PowerTransformer(standardize=True), slice(2, None))])
     X_train = preprocessor.fit_transform(X_train, y_train)
     X_test = preprocessor.transform(X_test)
     X_predict = preprocessor.transform(X_predict)

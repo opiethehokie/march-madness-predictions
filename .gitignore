@@ -8,6 +8,7 @@ __pycache__
 results/out.txt
 results/submission*.csv
 results/*.png
+results/*.html
 data/*.db
 data/*.h5
 data/metadata.csv

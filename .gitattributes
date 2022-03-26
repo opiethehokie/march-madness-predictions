@@ -1,0 +1,2 @@
+data/regular_season_detailed_results_*.csv filter=lfs diff=lfs merge=lfs -text
+data/tourney_detailed_results_*.csv filter=lfs diff=lfs merge=lfs -text
