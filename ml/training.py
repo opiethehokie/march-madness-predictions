@@ -1,21 +1,19 @@
-import keras.backend as K
+from db.cache import save_meta_data
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras.layers import Dense, Dropout
 from keras.models import Sequential, load_model
 from keras.optimizers import Adagrad
 from keras.wrappers.scikit_learn import KerasClassifier
-from sklearn.cluster import AgglomerativeClustering, FeatureAgglomeration
+from sklearn.cluster import FeatureAgglomeration
 from sklearn.decomposition import PCA
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.ensemble import RandomTreesEmbedding
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss, make_scorer
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.pipeline import Pipeline
 from skopt.searchcv import BayesSearchCV
 from skopt.space import Categorical, Integer, Real
-
-from db.cache import save_meta_data
 
 n_jobs = 4
 
@@ -41,7 +39,7 @@ def print_models(func):
 
 
 @print_models
-def linear_model(X, y, cv=11, rs=None, tune=False):
+def linear_model(X, y, cv=11, rs=None, tune=False, fit=True):
     grid = {
         'engineering__n_components': [.8, .9, .95],
         'classification__C': [5e-3, 1e-2, 5e-2],
@@ -55,12 +53,14 @@ def linear_model(X, y, cv=11, rs=None, tune=False):
     if tune:
         model = GridSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs)
 
-    model.fit(X, y)
+    if fit:
+        model.fit(X, y)
+
     return model
 
 
 @print_models
-def embedding_model(X, y, cv=11, rs=None, tune=False):
+def embedding_model(X, y, cv=11, rs=None, tune=False, fit=True):
     grid = {
         'engineering__n_estimators': Integer(50, 250),
         'engineering__max_depth': Integer(3, 6),
@@ -74,12 +74,14 @@ def embedding_model(X, y, cv=11, rs=None, tune=False):
     if tune:
         model = BayesSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs, random_state=rs, n_iter=32)
 
-    model.fit(X, y)
+    if fit:
+        model.fit(X, y)
+
     return model
 
 
 @print_models
-def neural_network_model(X, y, cv=2, rs=None, tune=False, fit=True, X_test=None, y_test=None):
+def neural_network_model(X, y, rs=None, tune=False, fit=True, X_test=None, y_test=None):
     checkpoint_file_path = 'data/mlp-checkpoint.h5'
     model_file_path = 'data/mlp.h5'
 
@@ -95,7 +97,7 @@ def neural_network_model(X, y, cv=2, rs=None, tune=False, fit=True, X_test=None,
             #mlp: Sequential = load_model(checkpoint_file_path)
             #print(mlp.get_config())
             #print('lr', K.eval(mlp.optimizer.lr))
-            mlp = load_model(model_file_path)
+            mlp: Sequential = load_model(model_file_path)
         else:
             mlp = Sequential()
             mlp.add(Dense(hls, activation='relu', input_shape=(X.shape[1],)))
@@ -105,6 +107,7 @@ def neural_network_model(X, y, cv=2, rs=None, tune=False, fit=True, X_test=None,
         return mlp
 
     if tune:
+        cv = StratifiedKFold(n_splits=2, shuffle=False, random_state=rs)
         classifier = KerasClassifier(build_fn=create_mlp)
         model = BayesSearchCV(classifier, grid, cv=cv, scoring=scoring, n_jobs=1, random_state=rs, n_iter=32)
     else:
@@ -124,7 +127,7 @@ def neural_network_model(X, y, cv=2, rs=None, tune=False, fit=True, X_test=None,
 
 
 @print_models
-def bayesian_model(X, y, cv=11, rs=None, tune=False):
+def bayesian_model(X, y, cv=11, tune=False, fit=True):
     grid = [{
         'engineering__n_clusters': range(2, 20, 1),
         'engineering__affinity': ['euclidean', 'l1', 'l2', 'manhattan', 'cosine'],
@@ -145,5 +148,7 @@ def bayesian_model(X, y, cv=11, rs=None, tune=False):
     if tune:
         model = GridSearchCV(model, grid, cv=cv, scoring=scoring, n_jobs=n_jobs)
 
-    model.fit(X, y)
+    if fit:
+        model.fit(X, y)
+
     return model

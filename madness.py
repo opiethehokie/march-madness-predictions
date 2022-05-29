@@ -48,10 +48,14 @@ if __name__ == '__main__':
     # ML
 
     classification_models = [linear_model(X_train, y_train, cv=cv, rs=random_state, tune=False),
-                             embedding_model(X_train, y_train, rs=random_state, tune=False),
+                             embedding_model(X_train, y_train, cv=cv, rs=random_state, tune=False),
                              neural_network_model(X_train, y_train, rs=random_state, tune=False, fit=False),
-                             bayesian_model(X_train, y_train, cv=cv, rs=random_state, tune=False)
+                             bayesian_model(X_train, y_train, cv=cv, tune=False)
                             ]
+
+    random_state = None
+    random.seed(random_state)
+    np.random.seed(random_state)
 
     if X_test.size > 0:
         results = average_predictions([], classification_models, X_test)
@@ -80,7 +84,8 @@ if __name__ == '__main__':
         for predict_year in [2015, 2016, 2017, 2018, 2019]:
             _, future_games = possible_tourney_matchups(predict_year)
             X_train, X_test, _, y_train, y_test, _ = prepare_data(games, future_games, start_day, start_year, predict_year)
-            for rs in np.random.randint(0, 1000, 6):
+            for rs in np.random.randint(0, 1000, 10):
+                random.seed(rs)
                 np.random.seed(rs)
                 classification_y_train = [1 if yi > 0 else 0 for yi in y_train]
                 classification_y_test = [1 if yi > 0 else 0 for yi in y_test]
@@ -88,7 +93,7 @@ if __name__ == '__main__':
                 model1_results.append(log_loss(classification_y_test, model1.predict_proba(X_test)[:, 1]))
                 model2 = embedding_model(X_train, classification_y_train, rs=rs)
                 model2_results.append(log_loss(classification_y_test, model2.predict_proba(X_test)[:, 1]))
-        # rough bootstrap with approx 30 samples
+        # rough bootstrap with approx 50 samples
         print('Models are significantly different: ', significance_test(model1_results, model2_results))
         print('Effect size: ', effect_size(model1_results, model2_results))
         print('%d samples out of %f needed to see effect' % (len(model1_results), statistical_power()))
